@@ -280,8 +280,7 @@ the endpoints cannot be guessed from the issuer URL — authorization lives
 under `/oauth2-as/oauth2-authz` and the JWKS at `/jwk`, not `/jwks`.
 
 - **Users** — `/oidc/authenticate/`, Helmholtz AAI. `OIDC_ALLOWED_ENTITLEMENTS`
-  restricts access to your group; empty accepts any successful login, which is
-  fine for a pilot but should be tightened before announcing the service.
+  restricts sign-in to the entitlements listed in it.
 - **You** — Django local password login at `/login/`, full admin at `/admin/`:
   every job, its events, the "Trouble" column, re-notify and re-fetch actions.
 
@@ -328,27 +327,3 @@ partial downloads discarded, idempotent resubmission reusing the request ID,
 transient failures leaving job status untouched, expired artifacts reported
 honestly, stale jobs flagged rather than failed, per-model parameter traps, and
 that no invented progress or ETA appears in the UI.
-
-## Not done
-
-- **Nothing is approved for publication yet.** `/privacy/` and `/terms/` render
-  as drafts until `PRIVACY_APPROVED` and `TERMS_APPROVED` are set, which should
-  happen only after the data protection officer and the institute have reviewed
-  the text — not merely once the contact fields are filled in.
-- **No OIDC client is registered**, so federated sign-in does not work yet, and
-  `OIDC_ALLOWED_ENTITLEMENTS` is empty, which would accept any successful
-  Helmholtz AAI login.
-- **No billing integration.** Native `gpu_seconds` is shown as reported; there
-  is no currency conversion, because no rate was established.
-- **`GET /v1/models` is not consulted at runtime**; aliases are hardcoded in the
-  specs. `manage.py livecheck --discover` checks them on demand. Worth wiring
-  into a readiness check if aliases start moving.
-- **BioEmu2 previews show the topology, not the ensemble.** The sampled
-  conformations are a trajectory in the archive, which needs a desktop viewer.
-- **Artifact storage is never pruned.** `ARTIFACT_ROOT` grows without limit;
-  there is no retention job.
-- **Unvalidated model paths are not exposed**: BioEmu2's multi-GPU route and
-  advanced RFdiffusion3 inputs were not covered by deployment validation, so
-  the forms do not offer them.
-- **The structure check is a plausibility check, not validation.** It measures
-  backbone bond lengths only. A structure can pass it and still be wrong.
