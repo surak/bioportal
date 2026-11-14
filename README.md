@@ -6,8 +6,6 @@ BindCraft, RFdiffusion3, ESMFold2 and BioEmu2.
 One Django app, one page per model. Users sign in with their JSC account,
 submit a job, close the tab, and come back — or get an email — when it's done.
 
-Built against `Blablador-Molecular-API-Agent-Handoff.md` (2026-11-14).
-
 ## How it fits together
 
 ```
