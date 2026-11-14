@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/bioportal-logo.svg">
+  <img src="docs/img/bioportal-logo.svg" alt="BioPortal" width="460">
+</picture>
+
 # BioPortal
 
 Web frontend for the five molecular models on Blablador: Proteina-Complexa,
@@ -282,6 +287,34 @@ under `/oauth2-as/oauth2-authz` and the JWKS at `/jwk`, not `/jwks`.
   every job, its events, the "Trouble" column, re-notify and re-fetch actions.
 
 A federated login never grants staff rights; those are set locally.
+
+## Security and compliance
+
+The service is registered with Helmholtz AAI, whose registration asks the
+operator to assert [Sirtfi](https://refeds.org/sirtfi). Sirtfi is a
+self-attestation by the **operating organisation**, not a property of this
+code, and most of its assertions — patching, vulnerability management,
+intrusion detection, an incident response capability — are about the
+institute's processes. Three of them have consequences in the code, and are
+covered by tests:
+
+- **[OS4]** access can be terminated. `mozilla-django-oidc` returns a matched
+  user without consulting `user_can_authenticate()`, so deactivating an
+  account in the Django admin would *not* have stopped that person signing in
+  with their federated identity. `jobs/auth.py` enforces it.
+- **[TR1]** who, what, where and when. Django logs neither successful nor
+  failed authentication by default; `jobs/audit.py` records sign-in, sign-out
+  and failed sign-in with username, client address and timestamp to the
+  `jobs.audit` logger, and never records credentials. Retention is the
+  operator's to configure, per **[TR2]**.
+- **[UR1]/[UR2]** defined rules of use, and a process to tell users about
+  them. `/terms/` publishes them and the sign-in page states that signing in
+  accepts them. The page marks itself a draft until `TERMS_APPROVED` is set.
+
+`/privacy/` is the data privacy statement that AAI registration requires as a
+DPS URL. Both pages carry placeholders for the controller, data protection
+officer and security contact, and say plainly when those are unset — they must
+be filled in and reviewed before the service is opened up.
 
 ## Tests
 

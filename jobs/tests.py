@@ -817,3 +817,68 @@ class PreviewTests(Base):
         self.assertEqual(
             self.client.get(reverse("jobs:preview", args=[job.pk])).status_code, 404
         )
+
+
+class SirtfiTests(Base):
+    """Checks behind the Sirtfi assertions that are code, not policy."""
+
+    CLAIMS = {
+        "sub": "alice-sub",
+        "email": "alice@fz-juelich.de",
+        "given_name": "Alice",
+        "family_name": "Example",
+    }
+
+    def _backend(self):
+        from jobs.auth import JscOIDCBackend
+
+        return JscOIDCBackend()
+
+    def test_os4_deactivated_user_cannot_sign_in_with_oidc(self):
+        """[OS4] access rights can be terminated.
+
+        mozilla-django-oidc's get_or_create_user returns a matched user
+        without consulting user_can_authenticate(), so is_active must be
+        enforced by us or deactivating an account would not lock anyone out.
+        """
+        self.user.is_active = False
+        self.user.save(update_fields=["is_active"])
+
+        backend = self._backend()
+        with mock.patch.object(backend, "get_userinfo", return_value=self.CLAIMS):
+            with mock.patch.object(backend, "get_token", return_value={"access_token": "x", "id_token": "y"}):
+                with mock.patch.object(backend, "verify_token", return_value=self.CLAIMS):
+                    user = backend.get_or_create_user("tok", "idtok", self.CLAIMS)
+        self.assertIsNone(user, "a deactivated user was allowed to authenticate")
+
+    def test_os4_active_user_still_signs_in(self):
+        backend = self._backend()
+        with mock.patch.object(backend, "get_userinfo", return_value=self.CLAIMS):
+            user = backend.get_or_create_user("tok", "idtok", self.CLAIMS)
+        self.assertEqual(user, self.user)
+
+    def test_tr1_successful_login_is_logged_with_actor_and_time(self):
+        """[TR1] retain who did what, when."""
+        with self.assertLogs("jobs.audit", level="INFO") as caught:
+            self.client.force_login(self.user)
+        joined = " ".join(caught.output)
+        self.assertIn("login", joined)
+        self.assertIn(self.user.username, joined)
+
+    def test_tr1_failed_login_is_logged(self):
+        with self.assertLogs("jobs.audit", level="WARNING") as caught:
+            self.client.post(
+                reverse("login"), {"username": "alice", "password": "wrong"}
+            )
+        self.assertIn("login-failed", " ".join(caught.output))
+
+    def test_tr1_audit_log_never_contains_the_api_key(self):
+        with self.assertLogs("jobs.audit", level="INFO") as caught:
+            self.client.force_login(self.user)
+        self.assertNotIn("alice-personal-key", " ".join(caught.output))
+
+    def test_ur1_rules_of_use_are_published(self):
+        """[UR1] the participant has defined rules and conditions of use."""
+        resp = self.client.get(reverse("jobs:terms"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Acceptable use")

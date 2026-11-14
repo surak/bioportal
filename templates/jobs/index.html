@@ -1,5 +1,8 @@
 {% extends "base.html" %}
+{% load static %}
 {% block content %}
+<img class="hero-logo" src="{% static 'img/bioportal-logo.svg' %}"
+     alt="BioPortal — molecular models on Blablador">
 <h1>Protein modelling on the cluster</h1>
 <p class="lede">Submit a job, close the tab, come back when it's done.</p>
 <p class="hint">

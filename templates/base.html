@@ -5,11 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}BioPortal{% endblock %}</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/htmx/2.0.4/htmx.min.js"></script>
+<link rel="icon" type="image/svg+xml" href="{% static 'img/bioportal-square.svg' %}">
+<link rel="apple-touch-icon" href="{% static 'img/bioportal-icon-512.png' %}">
 <link rel="stylesheet" href="{% static 'app.css' %}">
 </head>
 <body>
 <header class="topbar">
-  <a class="brand" href="{% url 'jobs:index' %}">BioPortal</a>
+  <a class="brand" href="{% url 'jobs:index' %}">
+    <img src="{% static 'img/bioportal-mark.svg' %}" alt="" width="46" height="33">
+    <span>BioPortal</span>
+  </a>
   <nav>
     {% if user.is_authenticated %}
       <a href="{% url 'jobs:list' %}">My jobs</a>
@@ -36,7 +41,9 @@
 </main>
 
 <footer>
-  <p>Jülich Supercomputing Centre · jobs run on the institute's cluster.</p>
+  <p>Jülich Supercomputing Centre · jobs run on the institute's cluster ·
+     <a href="{% url 'jobs:terms' %}">Acceptable use</a> ·
+     <a href="{% url 'jobs:privacy' %}">Data privacy</a></p>
 </footer>
 </body>
 </html>

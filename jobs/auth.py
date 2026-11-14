@@ -13,6 +13,7 @@ from django.core.exceptions import PermissionDenied
 from mozilla_django_oidc.auth import OIDCAuthenticationBackend
 
 log = logging.getLogger(__name__)
+audit = logging.getLogger("jobs.audit")
 
 
 class JscOIDCBackend(OIDCAuthenticationBackend):
@@ -28,6 +29,22 @@ class JscOIDCBackend(OIDCAuthenticationBackend):
             return True
         log.warning("denying login for %s: no matching entitlement", claims.get("sub"))
         raise PermissionDenied("Your account is not entitled to use this service.")
+
+    def get_or_create_user(self, access_token, id_token, payload):
+        """Refuse a deactivated account.
+
+        mozilla-django-oidc returns a matched user without consulting
+        user_can_authenticate(), so without this an administrator who
+        deactivates someone in the Django admin would not actually stop them
+        signing in with their federated identity. Sirtfi [OS4] requires that
+        access can be terminated.
+        """
+        user = super().get_or_create_user(access_token, id_token, payload)
+        if user is not None and not self.user_can_authenticate(user):
+            log.warning("refused sign-in for deactivated user %s", user.pk)
+            audit.warning("login-refused user=%s reason=inactive", user.username)
+            return None
+        return user
 
     def create_user(self, claims):
         user = super().create_user(claims)

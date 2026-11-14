@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Data privacy · BioPortal{% endblock %}
+{% block content %}
+<h1>Data privacy statement</h1>
+<p class="lede">
+  What BioPortal stores about you, why, and for how long.
+</p>
+
+{% if incomplete %}
+  <div class="notice warn">
+    <strong>This statement is not yet complete.</strong>
+    <p>
+      The controller and data protection officer details below are
+      placeholders. They must be filled in, and the text reviewed by the
+      operating institute's data protection officer, before this page is
+      published as the service's privacy statement.
+    </p>
+  </div>
+{% endif %}
+
+<h2>Who is responsible</h2>
+<p>
+  Controller: {{ controller }}<br>
+  Data protection officer: {{ dpo_contact }}<br>
+  Service contact: {{ admin_contact }}
+</p>
+
+<h2>What is processed</h2>
+<table class="jobs">
+  <thead><tr><th>Data</th><th>Why</th><th>Kept</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Your name, email address and group memberships, received from
+          Helmholtz AAI when you sign in</td>
+      <td>To identify your account and send you job notifications</td>
+      <td>Until your account is deleted</td>
+    </tr>
+    <tr>
+      <td>Your Blablador API key</td>
+      <td>To submit your jobs and retrieve your results under your own
+          account. Encrypted before storage, never displayed back to you, and
+          never written to logs</td>
+      <td>Until you remove it on the API key page</td>
+    </tr>
+    <tr>
+      <td>Your job inputs — sequences, uploaded structures and parameters</td>
+      <td>They are the input to the computation</td>
+      <td>Stored with the job record until the job is deleted</td>
+    </tr>
+    <tr>
+      <td>Your results</td>
+      <td>So they remain available after the computing service deletes its own
+          copy</td>
+      <td>On this portal's storage until deleted by an administrator</td>
+    </tr>
+    <tr>
+      <td>Job metadata — timestamps, status, GPU time used, and an audit trail
+          of changes to each job</td>
+      <td>To show you your jobs, and to let administrators diagnose failures</td>
+      <td>With the job record</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Where your data goes</h2>
+<p>
+  Job inputs are sent to the molecular computing service at
+  <code>{{ api_base }}</code>, operated by the Jülich Supercomputing Centre,
+  and are processed on its shared storage and GPU nodes. That service keeps
+  inputs and results on shared server storage during processing and for 48
+  hours afterwards: it is not a service where nothing is written to disk. Do
+  not submit material that may not be stored in this way.
+</p>
+<p>
+  Nothing is sent to any other recipient. The portal sets no advertising or
+  analytics cookies; the only cookies are those needed to keep you signed in
+  and to protect forms against cross-site request forgery.
+</p>
+
+<h2>Your rights</h2>
+<p>
+  You can remove your API key at any time on the
+  <a href="{% url 'jobs:credential' %}">API key page</a>. To obtain a copy of
+  your data, correct it, or have it deleted, contact {{ admin_contact }}. You
+  also have the right to complain to a supervisory authority.
+</p>
+
+<h2>Logging</h2>
+<p>
+  The portal records errors and job state changes. These records do not
+  contain your API key, your sequences or your uploaded structures.
+</p>
+
+<p class="meta">Last updated {{ updated }}.</p>
+{% endblock %}

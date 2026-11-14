@@ -181,6 +181,19 @@ DEFAULT_FROM_EMAIL = _env("DEFAULT_FROM_EMAIL", "bioportal@fz-juelich.de")
 # --- Quotas ---------------------------------------------------------------
 MAX_ACTIVE_JOBS_PER_USER = int(_env("MAX_ACTIVE_JOBS_PER_USER", "5"))
 
+# --- Privacy statement ----------------------------------------------------
+# Shown at /privacy/, which is the URL Helmholtz AAI asks for when
+# registering the service. These must be set by whoever operates the
+# deployment; the page states plainly when they have not been.
+PRIVACY_CONTROLLER = _env("PRIVACY_CONTROLLER", "")
+PRIVACY_DPO_CONTACT = _env("PRIVACY_DPO_CONTACT", "")
+PRIVACY_ADMIN_CONTACT = _env("PRIVACY_ADMIN_CONTACT", "")
+PRIVACY_UPDATED = _env("PRIVACY_UPDATED", "2026-11-14")
+SECURITY_CONTACT = _env("SECURITY_CONTACT", "")
+# Set once the institute has reviewed and adopted the rules of use shown at
+# /terms/; until then the page says plainly that they are a draft.
+TERMS_APPROVED = _bool("TERMS_APPROVED", False)
+
 if not DEBUG:
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
@@ -191,6 +204,25 @@ if not DEBUG:
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "formatters": {
+        "audit": {
+            # Timestamps are required for incident response; keep them
+            # unambiguous and in UTC, as TIME_ZONE above sets.
+            "format": "%(asctime)s %(levelname)s %(name)s %(message)s",
+        },
+    },
+    "handlers": {
+        "console": {"class": "logging.StreamHandler"},
+        "audit": {"class": "logging.StreamHandler", "formatter": "audit"},
+    },
+    "loggers": {
+        # Authentication events. Keep these for as long as the operating
+        # organisation's incident response policy requires (Sirtfi TR2).
+        "jobs.audit": {
+            "handlers": ["audit"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
     "root": {"handlers": ["console"], "level": _env("LOG_LEVEL", "INFO")},
 }

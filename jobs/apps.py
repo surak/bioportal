@@ -6,6 +6,6 @@ class JobsConfig(AppConfig):
     name = "jobs"
 
     def ready(self):
-        from jobs import registry
+        from jobs import audit, registry  # noqa: F401  (registers signals)
 
         registry.load_specs()

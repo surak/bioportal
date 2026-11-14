@@ -47,12 +47,14 @@ def page(current: str, specs, title: str, body: str) -> str:
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{E(title)} · BioPortal</title>
+<link rel="icon" type="image/svg+xml" href="img/bioportal-square.svg">
 <link rel="stylesheet" href="docs.css">
 </head>
 <body>
 <header class="masthead">
-  <a class="brand" href="index.html">BioPortal</a>
-  <span class="tagline">Molecular models on Blablador</span>
+  <a class="brand" href="index.html">
+    <img src="img/bioportal-logo.svg" alt="BioPortal — molecular models on Blablador">
+  </a>
 </header>
 {nav(current, specs)}
 <main>

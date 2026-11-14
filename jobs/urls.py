@@ -14,6 +14,8 @@ urlpatterns = [
     path("jobs/<int:pk>/result.zip", views.download, name="download"),
     path("jobs/<int:pk>/preview.pdb", views.preview, name="preview"),
     path("queue/", views.queue_status, name="queue"),
+    path("privacy/", views.privacy, name="privacy"),
+    path("terms/", views.terms, name="terms"),
     path("account/key/", views.credential, name="credential"),
     path("models/<slug:slug>/", views.submit, name="submit"),
 ]

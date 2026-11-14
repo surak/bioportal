@@ -2,6 +2,12 @@
 {% block title %}Sign in · BioPortal{% endblock %}
 {% block content %}
 <h1>Sign in</h1>
+<p class="hint">
+  By signing in you accept the
+  <a href="{% url 'jobs:terms' %}">acceptable use conditions</a>, and the
+  handling of your data described in the
+  <a href="{% url 'jobs:privacy' %}">privacy statement</a>.
+</p>
 <p><a class="button" href="{% url 'oidc_authentication_init' %}">Sign in with JSC / Helmholtz AAI</a></p>
 <details class="localauth">
   <summary>Administrator sign-in</summary>

@@ -14,7 +14,8 @@ code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.88em;
 
 .masthead { display:flex; align-items:baseline; gap:.75rem; flex-wrap:wrap;
   padding:1.25rem 1rem .75rem; max-width:58rem; margin:0 auto; }
-.brand { font-weight:650; font-size:1.15rem; text-decoration:none; color:var(--fg); }
+.brand { display:block; text-decoration:none; }
+.brand img { display:block; height:3.1rem; width:auto; max-width:100%; }
 .tagline { color:var(--muted); font-size:.9rem; }
 
 .sitenav { display:flex; gap:1rem; flex-wrap:wrap; max-width:58rem;

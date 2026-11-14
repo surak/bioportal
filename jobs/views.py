@@ -340,3 +340,42 @@ def healthz(request):
     from django.http import HttpResponse
 
     return HttpResponse("ok", content_type="text/plain")
+
+
+def privacy(request):
+    """The service's data privacy statement.
+
+    Required when registering with Helmholtz AAI, which asks for a DPS URL.
+    The controller and DPO details come from configuration: they are specific
+    to whoever operates the deployment, and the page says plainly when they
+    have not been filled in.
+    """
+    controller = settings.PRIVACY_CONTROLLER
+    dpo = settings.PRIVACY_DPO_CONTACT
+    admin = settings.PRIVACY_ADMIN_CONTACT
+    return render(
+        request,
+        "jobs/privacy.html",
+        {
+            "controller": controller or "not configured",
+            "dpo_contact": dpo or "not configured",
+            "admin_contact": admin or "not configured",
+            "api_base": settings.BLABLADOR_API_BASE,
+            "incomplete": not (controller and dpo and admin),
+            "updated": settings.PRIVACY_UPDATED,
+        },
+    )
+
+
+def terms(request):
+    """Rules and conditions of use (Sirtfi [UR1])."""
+    return render(
+        request,
+        "jobs/terms.html",
+        {
+            "organisation": settings.PRIVACY_CONTROLLER or "the operating institute",
+            "security_contact": settings.SECURITY_CONTACT or "the service operators",
+            "incomplete": not settings.TERMS_APPROVED,
+            "updated": settings.PRIVACY_UPDATED,
+        },
+    )
