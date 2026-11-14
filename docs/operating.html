@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Running the portal · BioPortal</title>
+<link rel="stylesheet" href="docs.css">
+</head>
+<body>
+<header class="masthead">
+  <a class="brand" href="index.html">BioPortal</a>
+  <span class="tagline">Molecular models on Blablador</span>
+</header>
+<nav class='sitenav'><a href="index.html">Overview</a><a href="bindcraft.html">BindCraft</a><a href="bioemu2.html">BioEmu2</a><a href="esmfold2.html">ESMFold2</a><a href="proteina-complexa.html">Proteina-Complexa</a><a href="rfdiffusion3.html">RFdiffusion3</a><a href="operating.html" class='on'>Running the portal</a></nav>
+<main>
+
+<h1>Running the portal</h1>
+<p class="lede">For whoever operates this deployment.</p>
+
+<h2>Two processes</h2>
+<p>
+  A web process (<code>gunicorn bioportal.wsgi</code>) and exactly one
+  reconciler (<code>manage.py reconcile --loop</code>). The web process never
+  waits on the molecular service: it records the job and returns. The
+  reconciler retries ambiguous submissions, polls each job on the schedule the
+  service asks for, downloads finished archives, and sends completion mail.
+</p>
+
+<h2>Configuration</h2>
+<table>
+<thead><tr><th>Setting</th><th>Why it matters</th></tr></thead>
+<tbody>
+<tr><td><code>BLABLADOR_API_KEY</code></td><td>Held only by the backend. The browser never talks to the service directly.</td></tr>
+<tr><td><code>ARTIFACT_ROOT</code></td><td>Where result archives are copied. This is what makes results outlive the service's 48-hour retention — size it for your throughput.</td></tr>
+<tr><td><code>MAX_ACTIVE_JOBS_PER_USER</code></td><td>Per-user fairness. The whole service accepts about 100 queued jobs and has a limited number of GPU slots, so set this deliberately before opening the portal up.</td></tr>
+<tr><td><code>STALE_RUNNING_SECONDS</code></td><td>How long a job may sit in <em>running</em> before it is flagged. Flagged jobs are never auto-failed: a lost worker cannot be distinguished from a slow job.</td></tr>
+<tr><td><code>OIDC_ALLOWED_ENTITLEMENTS</code></td><td>Restricts sign-in to your group. Empty accepts any successful Helmholtz AAI login — fine for a pilot, tighten before announcing.</td></tr>
+</tbody>
+</table>
+
+<h2>The admin</h2>
+<p>
+  <code>/admin/</code> lists every job with its event trail. The
+  <em>Trouble</em> column flags jobs that are stale or that the portal cannot
+  reach. Two actions are available: re-send a completion email, and retry an
+  archive download — the latter only helps inside the 48-hour window.
+</p>
+
+<h2>Adding a model</h2>
+<p>
+  Add a module under <code>jobs/specs/</code> with a form and a
+  <code>build(cleaned)</code> that returns the service's
+  <code>parameters</code> object, register a <code>ModelSpec</code> with the
+  alias from <code>GET /v1/models</code>, and list the module in
+  <code>load_specs()</code>. The homepage, job list, queue view and these docs
+  all pick it up automatically.
+</p>
+
+</main>
+<footer>
+  <p>Jülich Supercomputing Centre. Generated from the model registry by
+  <code>docs/build.py</code>.</p>
+</footer>
+</body>
+</html>

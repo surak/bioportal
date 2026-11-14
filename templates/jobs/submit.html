@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}{{ spec.name }} · BioPortal{% endblock %}
+{% block content %}
+<nav class="crumbs"><a href="{% url 'jobs:index' %}">Models</a> / {{ spec.name }}</nav>
+<h1>{{ spec.name }}</h1>
+<p class="lede">{{ spec.blurb }}</p>
+
+{% if spec.caveats %}
+  <div class="notice warn">
+    <strong>Before you run this:</strong>
+    <ul>{% for c in spec.caveats %}<li>{{ c }}</li>{% endfor %}</ul>
+  </div>
+{% endif %}
+
+{% if at_quota %}
+  <p class="notice warn">
+    You have {{ active }} jobs in flight, this portal's limit.
+    See <a href="{% url 'jobs:list' %}">your job list</a>.
+  </p>
+{% endif %}
+
+<form method="post" enctype="multipart/form-data" class="jobform">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <p class="hint">
+    Jobs wait in a shared queue and can run for hours. Submit once — closing
+    the page, losing your connection or reloading will not cancel it.
+    Results are kept for 48 hours by the service; we copy them to this portal
+    as soon as your job finishes.
+  </p>
+  <button type="submit" {% if at_quota %}disabled{% endif %}>Submit to the queue</button>
+</form>
+{% endblock %}

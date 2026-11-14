@@ -1,0 +1,36 @@
+<div id="viewer" class="viewer" data-url="{% url 'jobs:download' job.pk %}"></div>
+<p class="hint">
+  Preview of <code>structure.pdb</code> from the archive, rendered in your browser.
+</p>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ngl/2.3.1/ngl.js"></script>
+<script>
+(function () {
+  var el = document.getElementById("viewer");
+  if (!el || !window.NGL || !window.JSZip) return;
+  // The result is a ZIP; pull the first structure out of it client-side.
+  fetch(el.dataset.url, {credentials: "same-origin"})
+    .then(function (r) { return r.arrayBuffer(); })
+    .then(JSZip.loadAsync)
+    .then(function (zip) {
+      var name = Object.keys(zip.files).find(function (n) {
+        return /\.(pdb|cif)$/i.test(n) && !zip.files[n].dir;
+      });
+      if (!name) throw new Error("no structure in archive");
+      return zip.files[name].async("string").then(function (text) {
+        var stage = new NGL.Stage(el, {backgroundColor: "white"});
+        var ext = name.toLowerCase().endsWith("cif") ? "cif" : "pdb";
+        var blob = new Blob([text], {type: "text/plain"});
+        return stage.loadFile(blob, {ext: ext}).then(function (c) {
+          c.addRepresentation("cartoon", {colorScheme: "bfactor"});
+          c.autoView();
+          window.addEventListener("resize", function () { stage.handleResize(); });
+        });
+      });
+    })
+    .catch(function (err) {
+      el.innerHTML = '<p class="hint">No inline preview available (' +
+        String(err.message || err) + '). Download the archive to inspect it.</p>';
+    });
+})();
+</script>

@@ -1,0 +1,84 @@
+{% if job.is_active %}
+<div class="statuscard"
+     hx-get="{% url 'jobs:status' job.pk %}"
+     hx-trigger="every 15s"
+     hx-target="#status"
+     hx-swap="innerHTML">
+{% else %}
+<div class="statuscard">
+{% endif %}
+
+  <p class="status-line">
+    <span class="pill {{ job.status }}">{{ job.get_status_display }}</span>
+    {% if job.status == "pending" %}
+      holding your request until the service accepts it.
+    {% elif job.status == "queued" %}
+      {% if job.queue_position %}position {{ job.queue_position }} in the queue{% if job.model_queue_position %}, {{ job.model_queue_position }} for {{ spec.name }}{% endif %}.{% endif %}
+    {% elif job.status == "running" %}
+      {% if job.started_at %}started {{ job.started_at|timesince }} ago.{% endif %}
+    {% elif job.status == "cancelling" %}
+      waiting for the process to stop.
+    {% elif job.finished_at %}
+      {{ job.finished_at|timesince }} ago.
+    {% endif %}
+  </p>
+
+  {% if job.waiting_reason %}
+    <p class="hint">
+      {% if job.waiting_reason == "waiting_for_gpu_capacity" %}Waiting for GPU capacity.
+      {% elif job.waiting_reason == "waiting_for_model_worker" %}Waiting for a {{ spec.name }} worker.
+      {% else %}{{ job.waiting_reason }}{% endif %}
+    </p>
+  {% endif %}
+
+  {% if job.stage or job.message %}
+    <p class="stage">{{ job.stage }}{% if job.stage and job.message %} — {% endif %}{{ job.message }}</p>
+  {% endif %}
+
+  {% if job.is_active %}
+    {# Queue position shows order, not a start guarantee; no ETA is available. #}
+    <p class="hint">
+      There's no progress percentage or estimated finish time for these models,
+      so this page shows only what the service reports.
+      You can close it — {% if job.notify_by_email %}we'll email you when it's done.{% else %}your job list keeps track of it.{% endif %}
+    </p>
+  {% endif %}
+
+  {% if job.consecutive_poll_errors %}
+    <p class="notice warn">
+      We're having trouble reaching the service ({{ job.consecutive_poll_errors }} failed
+      {{ job.consecutive_poll_errors|pluralize:"check,checks" }}). <strong>Your job is
+      unaffected</strong> — this is a connection problem on our side, and we're still retrying.
+    </p>
+  {% endif %}
+
+  {% if job.stale_since %}
+    <p class="notice warn">
+      This job has been running unusually long without an update. That can mean its
+      worker was lost; the service does not requeue such jobs automatically.
+      Please contact the service operators quoting job <code>{{ job.remote_job_id }}</code>.
+    </p>
+  {% endif %}
+
+  {% if job.is_active %}
+    <form method="post" action="{% url 'jobs:cancel' job.pk %}">
+      {% csrf_token %}<button class="danger" type="submit">Cancel job</button>
+    </form>
+  {% endif %}
+
+  {% if job.status == "completed" %}{% include "jobs/_result.html" %}{% endif %}
+
+  {% if job.error %}
+    <h3>Reported error</h3>
+    <pre class="log error">{{ job.error }}</pre>
+  {% endif %}
+
+  {% if job.gpu_seconds is not None %}
+    <p class="usage">
+      {{ job.gpu_seconds|floatformat:1 }} GPU-seconds
+      {% if job.usage.gpu_model %} on {{ job.usage.gpu_model }}{% endif %}
+      {% if job.usage.gpu_count %} ({{ job.usage.gpu_count }} GPU{{ job.usage.gpu_count|pluralize }}){% endif %}.
+      <span class="hint">Reserved GPU time including model loading; queue waiting excluded.</span>
+    </p>
+  {% endif %}
+</div>

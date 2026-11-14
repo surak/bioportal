@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Proteina-Complexa · BioPortal</title>
+<link rel="stylesheet" href="docs.css">
+</head>
+<body>
+<header class="masthead">
+  <a class="brand" href="index.html">BioPortal</a>
+  <span class="tagline">Molecular models on Blablador</span>
+</header>
+<nav class='sitenav'><a href="index.html">Overview</a><a href="bindcraft.html">BindCraft</a><a href="bioemu2.html">BioEmu2</a><a href="esmfold2.html">ESMFold2</a><a href="proteina-complexa.html" class='on'>Proteina-Complexa</a><a href="rfdiffusion3.html">RFdiffusion3</a><a href="operating.html">Running the portal</a></nav>
+<main>
+
+<h1>Proteina-Complexa</h1>
+<p class="lede">NVIDIA Proteina-Complexa binder generation against a target.</p>
+<p class="meta">API model id <code>alias-proteina-complexa</code></p>
+
+<div class='callout warn'><h2>Before you run this</h2><ul><li>This deployment is single-pass binder generation with reward scoring disabled - not the full reward-guided search and refinement pipeline.</li></ul></div>
+
+<h2>Inputs</h2>
+<table><thead><tr><th>Field</th><th>Shown as</th><th>Required</th><th>Default</th><th>Accepted</th><th>Notes</th></tr></thead><tbody><tr><td><code>target_pdb</code></td><td>Target structure (PDB)</td><td>yes</td><td>—</td><td>—</td><td></td></tr><tr><td><code>target_input</code></td><td>Target selection</td><td>yes</td><td>—</td><td>—</td><td>The chain and residue range to design against, e.g. B20-140.</td></tr><tr><td><code>binder_length_min</code></td><td>binder length min</td><td>yes</td><td>60</td><td>min 10, max 500</td><td></td></tr><tr><td><code>binder_length_max</code></td><td>binder length max</td><td>yes</td><td>100</td><td>min 10, max 500</td><td></td></tr><tr><td><code>hotspots</code></td><td>hotspots</td><td>no</td><td>—</td><td>—</td><td>Optional, comma-separated, e.g. A30,A33.</td></tr><tr><td><code>samples</code></td><td>samples</td><td>yes</td><td>1</td><td>min 1, max 128</td><td></td></tr><tr><td><code>steps</code></td><td>steps</td><td>yes</td><td>400</td><td>min 1, max 1000</td><td></td></tr><tr><td><code>seed</code></td><td>seed</td><td>no</td><td>42</td><td>—</td><td></td></tr></tbody></table>
+
+<h2>Results</h2>
+
+<p>
+  Results arrive as a single <code>result.zip</code>. The archive may contain
+  several files — reports, scores and more than one structure — so do not
+  assume a single PDB. BioPortal copies the archive to its own storage as soon
+  as the job finishes, which is what makes it available after the service's
+  48-hour window closes.
+</p>
+
+</main>
+<footer>
+  <p>Jülich Supercomputing Centre. Generated from the model registry by
+  <code>docs/build.py</code>.</p>
+</footer>
+</body>
+</html>

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}{{ job.display_label }} · BioPortal{% endblock %}
+{% block content %}
+<nav class="crumbs"><a href="{% url 'jobs:list' %}">My jobs</a> / #{{ job.pk }}</nav>
+<h1>{{ job.display_label }}</h1>
+<p class="meta">
+  {{ spec.name }}
+  {% if job.remote_job_id %} · job <code>{{ job.remote_job_id }}</code>{% endif %}
+  {% if job.submitted_at %} · submitted {{ job.submitted_at|date:"Y-m-d H:i" }} UTC{% endif %}
+</p>
+
+<div id="status">{% include "jobs/_status.html" %}</div>
+
+<details class="params">
+  <summary>Parameters</summary>
+  <dl>
+  {% for k, v in job.parameters.items %}
+    <dt>{{ k }}</dt><dd><code>{{ v|stringformat:"s"|truncatechars:600 }}</code></dd>
+  {% endfor %}
+  </dl>
+</details>
+{% endblock %}

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ESMFold2 · BioPortal</title>
+<link rel="stylesheet" href="docs.css">
+</head>
+<body>
+<header class="masthead">
+  <a class="brand" href="index.html">BioPortal</a>
+  <span class="tagline">Molecular models on Blablador</span>
+</header>
+<nav class='sitenav'><a href="index.html">Overview</a><a href="bindcraft.html">BindCraft</a><a href="bioemu2.html">BioEmu2</a><a href="esmfold2.html" class='on'>ESMFold2</a><a href="proteina-complexa.html">Proteina-Complexa</a><a href="rfdiffusion3.html">RFdiffusion3</a><a href="operating.html">Running the portal</a></nav>
+<main>
+
+<h1>ESMFold2</h1>
+<p class="lede">Full structure prediction from a single protein sequence.</p>
+<p class="meta">API model id <code>alias-esmfold2</code></p>
+
+<div class='callout warn'><h2>Before you run this</h2><ul><li>Produces exactly one prediction. The sequence path ignores sample count and seed.</li></ul></div>
+
+<h2>Inputs</h2>
+<table><thead><tr><th>Field</th><th>Shown as</th><th>Required</th><th>Default</th><th>Accepted</th><th>Notes</th></tr></thead><tbody><tr><td><code>sequence</code></td><td>Protein sequence</td><td>yes</td><td>—</td><td>—</td><td>FASTA or bare one-letter sequence.</td></tr><tr><td><code>num_loops</code></td><td>Loops</td><td>yes</td><td>3</td><td>min 1, max 8</td><td>1-8. More loops, slower.</td></tr><tr><td><code>steps</code></td><td>steps</td><td>yes</td><td>50</td><td>min 1, max 1000</td><td></td></tr></tbody></table>
+
+<h2>Results</h2>
+<p>The result archive contains structure.pdb.</p>
+<p>
+  Results arrive as a single <code>result.zip</code>. The archive may contain
+  several files — reports, scores and more than one structure — so do not
+  assume a single PDB. BioPortal copies the archive to its own storage as soon
+  as the job finishes, which is what makes it available after the service's
+  48-hour window closes.
+</p>
+
+</main>
+<footer>
+  <p>Jülich Supercomputing Centre. Generated from the model registry by
+  <code>docs/build.py</code>.</p>
+</footer>
+</body>
+</html>

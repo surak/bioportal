@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Protein modelling on the cluster</h1>
+<p class="lede">Submit a job, close the tab, come back when it's done.</p>
+<p class="hint">
+  Jobs run on shared GPUs and can take minutes or hours. Results are kept by the
+  service for 48 hours; this portal copies them as soon as a job finishes.
+</p>
+
+<div class="cards">
+  {% for spec in specs %}
+    <article class="card">
+      <h2>{{ spec.name }}</h2>
+      <p>{{ spec.blurb }}</p>
+      <a class="button" href="{% url 'jobs:submit' spec.slug %}">Submit a job</a>
+    </article>
+  {% endfor %}
+</div>
+{% endblock %}

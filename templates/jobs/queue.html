@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Queue · BioPortal{% endblock %}
+{% block content %}
+<h1>Service queue</h1>
+<p class="lede">Aggregate load across all users of the molecular service.</p>
+<table class="jobs">
+  <thead><tr><th>Model</th><th>Queued</th><th>Running</th><th>Workers ready</th><th>GPUs free</th></tr></thead>
+  <tbody>
+  {% for spec, q in snapshots.items %}
+    <tr>
+      <td>{{ spec.name }}</td>
+      {% if q.error %}
+        <td colspan="4" class="meta">unavailable — {{ q.error }}</td>
+      {% else %}
+        <td>{{ q.queued|default:"0" }}</td>
+        <td>{{ q.running|default:"0" }}</td>
+        <td>{{ q.model_workers_ready|default:"0" }}</td>
+        <td>{{ q.gpus_free|default:"0" }}</td>
+      {% endif %}
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="hint">
+  Scheduling takes the oldest eligible request, but GPU requirements and model
+  readiness mean later requests can start first — queue order is not a start
+  order. Free GPUs are those on molecular workers, not the whole cluster, and
+  an aggregate count doesn't guarantee a multi-GPU job fits on one worker.
+</p>
+{% endblock %}

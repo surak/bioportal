@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BioEmu2 · BioPortal</title>
+<link rel="stylesheet" href="docs.css">
+</head>
+<body>
+<header class="masthead">
+  <a class="brand" href="index.html">BioPortal</a>
+  <span class="tagline">Molecular models on Blablador</span>
+</header>
+<nav class='sitenav'><a href="index.html">Overview</a><a href="bindcraft.html">BindCraft</a><a href="bioemu2.html" class='on'>BioEmu2</a><a href="esmfold2.html">ESMFold2</a><a href="proteina-complexa.html">Proteina-Complexa</a><a href="rfdiffusion3.html">RFdiffusion3</a><a href="operating.html">Running the portal</a></nav>
+<main>
+
+<h1>BioEmu2</h1>
+<p class="lede">Samples an ensemble of conformations rather than one structure.</p>
+<p class="meta">API model id <code>alias-bioemu2</code></p>
+
+<div class='callout warn'><h2>Before you run this</h2><ul><li>The sequence shortcut creates protein chain A.</li><li>Runs on one GPU. The multi-GPU path was not validated in this rollout.</li></ul></div>
+
+<h2>Inputs</h2>
+<table><thead><tr><th>Field</th><th>Shown as</th><th>Required</th><th>Default</th><th>Accepted</th><th>Notes</th></tr></thead><tbody><tr><td><code>sequence</code></td><td>Protein sequence</td><td>yes</td><td>—</td><td>—</td><td></td></tr><tr><td><code>samples</code></td><td>samples</td><td>yes</td><td>1</td><td>min 1, max 128</td><td>Conformations to sample (1-128).</td></tr><tr><td><code>seed</code></td><td>seed</td><td>no</td><td>42</td><td>—</td><td>Optional. Leave blank for a random seed.</td></tr><tr><td><code>msa_mode</code></td><td>MSA mode</td><td>yes</td><td>single_sequence</td><td>one of: single_sequence</td><td>Single-sequence mode is a deliberate scientific choice: no MSA is searched and ColabFold is not contacted. Accuracy differs from an MSA-based run.</td></tr></tbody></table>
+
+<h2>Results</h2>
+<p>The archive may contain trajectory and structure files.</p>
+<p>
+  Results arrive as a single <code>result.zip</code>. The archive may contain
+  several files — reports, scores and more than one structure — so do not
+  assume a single PDB. BioPortal copies the archive to its own storage as soon
+  as the job finishes, which is what makes it available after the service's
+  48-hour window closes.
+</p>
+
+</main>
+<footer>
+  <p>Jülich Supercomputing Centre. Generated from the model registry by
+  <code>docs/build.py</code>.</p>
+</footer>
+</body>
+</html>

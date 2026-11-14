@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}My jobs · BioPortal{% endblock %}
+{% block content %}
+<h1>My jobs</h1>
+<p class="lede">This portal is the only record of your jobs — the service has no job list of its own.</p>
+<p class="filters">
+  <a href="{% url 'jobs:list' %}" {% if not status %}class="on"{% endif %}>All</a>
+  <a href="?status=active" {% if status == 'active' %}class="on"{% endif %}>In flight</a>
+  <a href="?status=completed" {% if status == 'completed' %}class="on"{% endif %}>Completed</a>
+  <a href="?status=failed" {% if status == 'failed' %}class="on"{% endif %}>Failed</a>
+</p>
+
+{% if jobs %}
+<table class="jobs">
+  <thead><tr><th>Job</th><th>Model</th><th>Status</th><th>Submitted</th><th>Result</th></tr></thead>
+  <tbody>
+  {% for job in jobs %}
+    <tr>
+      <td><a href="{{ job.get_absolute_url }}">{{ job.display_label }}</a></td>
+      <td>{{ job.spec.name }}</td>
+      <td>
+        <span class="pill {{ job.status }}">{{ job.get_status_display }}</span>
+        {% if job.queue_position %}<span class="meta">#{{ job.queue_position }}</span>{% endif %}
+      </td>
+      <td>{{ job.submitted_at|default:job.created_at|date:"Y-m-d H:i" }}</td>
+      <td>
+        {% if job.has_result %}<a href="{% url 'jobs:download' job.pk %}">zip</a>
+        {% elif job.artifact_state == "expired" %}<span class="meta">expired</span>
+        {% elif job.status == "completed" %}<span class="meta">fetching…</span>{% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+  <p class="notice">Nothing here yet. <a href="{% url 'jobs:index' %}">Pick a model</a> to get started.</p>
+{% endif %}
+{% endblock %}

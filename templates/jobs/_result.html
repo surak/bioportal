@@ -1,0 +1,33 @@
+<h3>Result</h3>
+{% if job.artifact_state == "stored" %}
+  <p>
+    <a class="button" href="{% url 'jobs:download' job.pk %}">Download result.zip</a>
+    <span class="meta">{{ job.artifact_bytes|filesizeformat }}</span>
+  </p>
+  <p class="hint">
+    Stored on our side, so it stays available after the service's own 48-hour
+    window closes.{% if spec.result_note %} {{ spec.result_note }}{% endif %}
+    The archive may hold several files — don't assume a single PDB.
+  </p>
+  {% include spec.result_template %}
+{% elif job.artifact_state == "downloading" %}
+  <p>Fetching the result archive from the service…</p>
+{% elif job.artifact_state == "pending" %}
+  <p>The job finished. We're queued to fetch its result archive.</p>
+  {% if job.result_expires_in %}
+    <p class="hint">The service keeps it for another {{ job.result_expires_in|timeuntil:"now" }}.</p>
+  {% endif %}
+{% elif job.artifact_state == "expired" %}
+  <p class="notice warn">
+    The service deleted this result before we could store it. Results are kept
+    for 48 hours after a job finishes; this one is gone and would have to be re-run.
+  </p>
+{% elif job.artifact_state == "too_large" %}
+  <p class="notice warn">
+    The result archive is larger than this portal stores automatically. Ask an
+    administrator to retrieve it for job <code>{{ job.remote_job_id }}</code> before
+    the 48-hour retention window closes.
+  </p>
+{% elif job.artifact_state == "failed" %}
+  <p class="notice warn">We couldn't download the result archive. Retrying.</p>
+{% endif %}

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Overview · BioPortal</title>
+<link rel="stylesheet" href="docs.css">
+</head>
+<body>
+<header class="masthead">
+  <a class="brand" href="index.html">BioPortal</a>
+  <span class="tagline">Molecular models on Blablador</span>
+</header>
+<nav class='sitenav'><a href="index.html" class='on'>Overview</a><a href="bindcraft.html">BindCraft</a><a href="bioemu2.html">BioEmu2</a><a href="esmfold2.html">ESMFold2</a><a href="proteina-complexa.html">Proteina-Complexa</a><a href="rfdiffusion3.html">RFdiffusion3</a><a href="operating.html">Running the portal</a></nav>
+<main>
+
+<h1>Submit a job, close the tab, come back later</h1>
+<p class="lede">
+  BioPortal is a web frontend for five molecular models running on shared GPUs
+  at the Jülich Supercomputing Centre. Sign in with your JSC account, fill in a
+  form, and collect your results when the job is done.
+</p>
+
+<div class="cards"><article class="card">
+  <h3><a href="bindcraft.html">BindCraft</a></h3>
+  <p>Designs binders against a target structure and filters them.</p>
+  <p class="meta"><code>alias-bindcraft</code></p>
+</article><article class="card">
+  <h3><a href="bioemu2.html">BioEmu2</a></h3>
+  <p>Samples an ensemble of conformations rather than one structure.</p>
+  <p class="meta"><code>alias-bioemu2</code></p>
+</article><article class="card">
+  <h3><a href="esmfold2.html">ESMFold2</a></h3>
+  <p>Full structure prediction from a single protein sequence.</p>
+  <p class="meta"><code>alias-esmfold2</code></p>
+</article><article class="card">
+  <h3><a href="proteina-complexa.html">Proteina-Complexa</a></h3>
+  <p>NVIDIA Proteina-Complexa binder generation against a target.</p>
+  <p class="meta"><code>alias-proteina-complexa</code></p>
+</article><article class="card">
+  <h3><a href="rfdiffusion3.html">RFdiffusion3</a></h3>
+  <p>Generates molecular designs from an official RFD3 input object.</p>
+  <p class="meta"><code>alias-rfdiffusion3</code></p>
+</article></div>
+
+<h2>How a job works</h2>
+<ol class="steps">
+  <li><strong>Submit once.</strong> Your request goes into a queue shared with
+      every other user of the service.</li>
+  <li><strong>Wait.</strong> Jobs can take minutes or hours. Closing the page,
+      losing your network connection or reloading does <em>not</em> cancel a
+      submitted job.</li>
+  <li><strong>Come back.</strong> Your job list keeps every job you have
+      submitted. If you asked for an email, you get one when the job finishes.</li>
+  <li><strong>Download.</strong> Results are a ZIP archive, kept by BioPortal
+      after the service itself has deleted its copy.</li>
+</ol>
+
+<h2>What the waiting screen can and cannot tell you</h2>
+<p>
+  While a job is queued you are shown your position in the queue and why it is
+  waiting — for a free GPU, or for a worker for that model. While it runs you
+  are shown whatever stage the service reports.
+</p>
+<div class="callout">
+  <p>
+    <strong>There is no progress percentage and no estimated finish time.</strong>
+    The service does not calculate them, so BioPortal does not invent them.
+    Queue position tells you the order requests were accepted; it is not a
+    promise about when yours will start, because a job needing fewer GPUs can
+    legitimately start before one ahead of it.
+  </p>
+</div>
+
+<h2>Results and the 48-hour window</h2>
+<p>
+  The molecular service deletes results 48 hours after a job reaches a final
+  state. BioPortal fetches your archive automatically as soon as your job
+  finishes, so you do not have to race that deadline. If an archive was lost
+  before it could be copied, the job page says so plainly rather than showing a
+  broken link — the job would have to be re-run.
+</p>
+
+<h2>Cancelling</h2>
+<p>
+  You can cancel a job from its page. A queued job is normally dropped straight
+  away. A running job keeps going until its process actually stops, so its
+  status reads <em>cancelling</em> for a while — and a job can still finish if
+  it beats the cancellation. Closing your browser tab is not a cancellation.
+</p>
+
+<h2>If something looks wrong</h2>
+<ul>
+  <li><strong>“We're having trouble reaching the service.”</strong> A connection
+      problem on the portal's side. Your job is unaffected and still running;
+      the portal keeps retrying.</li>
+  <li><strong>A job running far longer than expected.</strong> The job page will
+      flag it. The service does not automatically restart jobs whose worker was
+      lost, so contact the operators with the job ID shown on the page.</li>
+  <li><strong>Limits.</strong> Each account may have a few jobs in flight at a
+      time, and the whole service accepts roughly 100 queued jobs. If the queue
+      is full your request is kept and submitted automatically — do not resend it.</li>
+</ul>
+
+<div class="callout">
+  <p>
+    Inputs and results are stored on shared institute servers while a job is
+    processed and during the retention window. This is not a
+    nothing-touches-the-server service; do not submit material that may not be
+    stored there.
+  </p>
+</div>
+
+</main>
+<footer>
+  <p>Jülich Supercomputing Centre. Generated from the model registry by
+  <code>docs/build.py</code>.</p>
+</footer>
+</body>
+</html>

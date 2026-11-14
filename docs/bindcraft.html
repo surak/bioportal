@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BindCraft · BioPortal</title>
+<link rel="stylesheet" href="docs.css">
+</head>
+<body>
+<header class="masthead">
+  <a class="brand" href="index.html">BioPortal</a>
+  <span class="tagline">Molecular models on Blablador</span>
+</header>
+<nav class='sitenav'><a href="index.html">Overview</a><a href="bindcraft.html" class='on'>BindCraft</a><a href="bioemu2.html">BioEmu2</a><a href="esmfold2.html">ESMFold2</a><a href="proteina-complexa.html">Proteina-Complexa</a><a href="rfdiffusion3.html">RFdiffusion3</a><a href="operating.html">Running the portal</a></nav>
+<main>
+
+<h1>BindCraft</h1>
+<p class="lede">Designs binders against a target structure and filters them.</p>
+<p class="meta">API model id <code>alias-bindcraft</code></p>
+
+<div class='callout warn'><h2>Before you run this</h2><ul><li>Native quality filters can accept fewer designs than you asked for - a finished run is not a quality guarantee.</li><li>Output is not deterministic; this build does not wire a seed into the CLI.</li></ul></div>
+
+<h2>Inputs</h2>
+<table><thead><tr><th>Field</th><th>Shown as</th><th>Required</th><th>Default</th><th>Accepted</th><th>Notes</th></tr></thead><tbody><tr><td><code>target_pdb</code></td><td>Target structure (PDB)</td><td>yes</td><td>—</td><td>—</td><td></td></tr><tr><td><code>chains</code></td><td>Target chains</td><td>yes</td><td>A</td><td>—</td><td>One or more chain IDs, e.g. A or A,B.</td></tr><tr><td><code>binder_length_min</code></td><td>binder length min</td><td>yes</td><td>60</td><td>min 10, max 500</td><td></td></tr><tr><td><code>binder_length_max</code></td><td>binder length max</td><td>yes</td><td>100</td><td>min 10, max 500</td><td></td></tr><tr><td><code>hotspots</code></td><td>Hotspots</td><td>no</td><td>—</td><td>—</td><td>Native BindCraft hotspot string. Optional.</td></tr><tr><td><code>samples</code></td><td>Final designs wanted</td><td>yes</td><td>1</td><td>min 1, max 128</td><td></td></tr><tr><td><code>max_trajectories</code></td><td>max trajectories</td><td>yes</td><td>100</td><td>min 1, max 10000</td><td>Upper bound on attempted trajectories (1-10000).</td></tr><tr><td><code>walltime_hours</code></td><td>walltime hours</td><td>yes</td><td>24</td><td>min 1, max 24</td><td>The job is stopped after this long (max 24 h).</td></tr></tbody></table>
+
+<h2>Results</h2>
+<p>Examine the reports and accepted-design outputs in the archive.</p>
+<p>
+  Results arrive as a single <code>result.zip</code>. The archive may contain
+  several files — reports, scores and more than one structure — so do not
+  assume a single PDB. BioPortal copies the archive to its own storage as soon
+  as the job finishes, which is what makes it available after the service's
+  48-hour window closes.
+</p>
+
+</main>
+<footer>
+  <p>Jülich Supercomputing Centre. Generated from the model registry by
+  <code>docs/build.py</code>.</p>
+</footer>
+</body>
+</html>

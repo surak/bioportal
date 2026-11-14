@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RFdiffusion3 · BioPortal</title>
+<link rel="stylesheet" href="docs.css">
+</head>
+<body>
+<header class="masthead">
+  <a class="brand" href="index.html">BioPortal</a>
+  <span class="tagline">Molecular models on Blablador</span>
+</header>
+<nav class='sitenav'><a href="index.html">Overview</a><a href="bindcraft.html">BindCraft</a><a href="bioemu2.html">BioEmu2</a><a href="esmfold2.html">ESMFold2</a><a href="proteina-complexa.html">Proteina-Complexa</a><a href="rfdiffusion3.html" class='on'>RFdiffusion3</a><a href="operating.html">Running the portal</a></nav>
+<main>
+
+<h1>RFdiffusion3</h1>
+<p class="lede">Generates molecular designs from an official RFD3 input object.</p>
+<p class="meta">API model id <code>alias-rfdiffusion3</code></p>
+
+<div class='callout warn'><h2>Before you run this</h2><ul><li>Unconditional 40-50 residue design is the validated path. Other input fields are passed through to RFD3 but were not covered by deployment validation.</li></ul></div>
+
+<h2>Inputs</h2>
+<table><thead><tr><th>Field</th><th>Shown as</th><th>Required</th><th>Default</th><th>Accepted</th><th>Notes</th></tr></thead><tbody><tr><td><code>mode</code></td><td>mode</td><td>yes</td><td>unconditional</td><td>one of: unconditional, advanced</td><td></td></tr><tr><td><code>length</code></td><td>Length</td><td>no</td><td>40-50</td><td>—</td><td>Residues, e.g. 45 or 40-50. Used in unconditional mode.</td></tr><tr><td><code>rfd3_input</code></td><td>RFD3 input object</td><td>no</td><td>—</td><td>—</td><td>A JSON object in the official RFdiffusion3 input schema - not an English prompt. Refer to an attached file by its filename.</td></tr><tr><td><code>attachment</code></td><td>Attachment (optional)</td><td>no</td><td>—</td><td>—</td><td>A PDB referred to by name from the input object above.</td></tr><tr><td><code>attachment_name</code></td><td>attachment name</td><td>no</td><td>target.pdb</td><td>—</td><td>The filename your input object refers to.</td></tr><tr><td><code>samples</code></td><td>samples</td><td>yes</td><td>1</td><td>min 1, max 128</td><td></td></tr></tbody></table>
+
+<h2>Results</h2>
+
+<p>
+  Results arrive as a single <code>result.zip</code>. The archive may contain
+  several files — reports, scores and more than one structure — so do not
+  assume a single PDB. BioPortal copies the archive to its own storage as soon
+  as the job finishes, which is what makes it available after the service's
+  48-hour window closes.
+</p>
+
+</main>
+<footer>
+  <p>Jülich Supercomputing Centre. Generated from the model registry by
+  <code>docs/build.py</code>.</p>
+</footer>
+</body>
+</html>
