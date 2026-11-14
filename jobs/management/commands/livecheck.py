@@ -39,6 +39,9 @@ class Command(BaseCommand):
         parser.add_argument("--watch", action="store_true")
         parser.add_argument("--timeout", type=int, default=600)
         parser.add_argument("--user", default="admin")
+        parser.add_argument("--sequence-file",
+                            help="FASTA file to use instead of the built-in sequence.")
+        parser.add_argument("--label", default="")
 
     def _key(self, username: str) -> str:
         key = key_for(User.objects.get(username=username))
@@ -56,7 +59,11 @@ class Command(BaseCommand):
         if opts["queue"]:
             self.queue()
         if opts["submit"]:
-            self.submit(opts["submit"], opts["user"])
+            self.submit(
+                opts["submit"], opts["user"],
+                sequence_file=opts.get("sequence_file"),
+                label=opts.get("label") or "",
+            )
         if opts["watch"]:
             self.watch(opts["timeout"])
 
@@ -94,15 +101,22 @@ class Command(BaseCommand):
 
     # --- costs GPU time ---------------------------------------------------
 
-    def submit(self, slug: str, username: str):
+    def submit(self, slug: str, username: str, sequence_file=None, label=""):
         spec = registry.get(slug)
         owner = User.objects.get(username=username)
         params = SMOKE_PARAMS[slug]()
+        if sequence_file:
+            from jobs.forms import clean_protein_sequence
+            from pathlib import Path as _Path
+
+            params["sequence"] = clean_protein_sequence(
+                _Path(sequence_file).read_text()
+            )
 
         job = Job.objects.create(
             owner=owner,
             model_slug=slug,
-            label=f"live smoke {timezone.now():%H:%M}",
+            label=label or f"live smoke {timezone.now():%H:%M}",
             request_id=uuid.uuid4(),
             parameters=params,
             status=Status.PENDING,

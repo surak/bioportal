@@ -26,7 +26,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
-from jobs import blablador, notify
+from jobs import blablador, notify, structure
 from jobs.models import ApiCredential, ArtifactState, Job, JobEvent, Status, key_for
 
 log = logging.getLogger(__name__)
@@ -245,14 +245,31 @@ class Command(BaseCommand):
                 )
                 log.warning("artifact download failed for job %s: %s", job.pk, exc)
             else:
+                # A completed job can still return an impossible structure, so
+                # check the backbone before telling the user it is ready.
+                report = structure.check_archive(dest)
                 Job.objects.filter(pk=job.pk).update(
                     artifact_state=ArtifactState.STORED,
                     artifact_path=str(dest),
                     artifact_bytes=size,
+                    structure_check=report,
                 )
                 JobEvent.objects.create(
                     job=job, kind="artifact-stored", detail=f"{size} bytes"
                 )
+                if report.get("verdict") == structure.Verdict.IMPLAUSIBLE:
+                    JobEvent.objects.create(
+                        job=job,
+                        kind="structure-implausible",
+                        detail=(
+                            f"{report.get('plausible_bonds')}/{report.get('bonds')} "
+                            f"bonds plausible, mean {report.get('mean_ca_ca')} A"
+                        ),
+                    )
+                    log.warning(
+                        "job %s returned an implausible structure (%s)",
+                        job.pk, report.get("fraction"),
+                    )
 
     # --- 4. stale running jobs -------------------------------------------
 

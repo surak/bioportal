@@ -15,9 +15,31 @@ class ESMFold2Form(BaseJobForm):
     )
     num_loops = forms.IntegerField(
         min_value=1, max_value=8, initial=3, label="Loops",
-        help_text="1-8. More loops, slower.",
+        help_text="1-8. More loops, slower, generally better.",
     )
-    steps = forms.IntegerField(min_value=1, max_value=1000, initial=50)
+    steps = forms.IntegerField(
+        min_value=1, max_value=1000, initial=50,
+        help_text=(
+            "Sampling steps. Low values finish quickly but can return a "
+            "structure that is not physically foldable."
+        ),
+    )
+
+    def clean(self):
+        cleaned = super().clean()
+        steps = cleaned.get("steps")
+        loops = cleaned.get("num_loops")
+        # Measured: 1 loop / 10 steps returned a backbone whose consecutive
+        # CA atoms averaged 10 A apart, against the ~3.8 A that chemistry
+        # allows. The service accepts these values; the result is unusable.
+        if steps is not None and loops is not None and steps < 25 and loops < 2:
+            self.add_error(
+                "steps",
+                "This combination of steps and loops has been observed to "
+                "produce structures that are not physically foldable. Use at "
+                "least 25 steps, or 2 loops.",
+            )
+        return cleaned
 
 
 def build(cleaned: dict) -> dict:

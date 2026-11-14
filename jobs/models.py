@@ -80,6 +80,8 @@ class Job(models.Model):
     )
     artifact_path = models.CharField(max_length=512, blank=True)
     artifact_bytes = models.BigIntegerField(null=True, blank=True)
+    # Backbone plausibility of the returned structure; see jobs/structure.py.
+    structure_check = models.JSONField(null=True, blank=True)
     # Upstream deletes results 48h after a terminal state.
     retention_until = models.DateTimeField(null=True, blank=True)
 
@@ -130,6 +132,21 @@ class Job(models.Model):
             return None
         remaining = self.retention_until - timezone.now()
         return remaining if remaining.total_seconds() > 0 else dt.timedelta(0)
+
+    @property
+    def structure_warning(self) -> str:
+        """A plain-language warning when the returned backbone is impossible."""
+        from jobs import structure
+
+        check = self.structure_check or {}
+        if check.get("verdict") != structure.Verdict.IMPLAUSIBLE:
+            return ""
+        return (
+            f"Only {check.get('plausible_bonds', 0)} of {check.get('bonds', 0)} "
+            f"consecutive backbone bonds are a physically possible length "
+            f"(mean {check.get('mean_ca_ca')} \u00c5, expected about 3.8). "
+            "The job finished, but this is not a folded structure."
+        )
 
     @property
     def gpu_seconds(self) -> float | None:

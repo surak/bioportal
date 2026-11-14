@@ -68,6 +68,54 @@
   </figure>
 </div>
 
+<h2>Results from the five models</h2>
+<p>
+  Every structure below was produced by this portal against the live service,
+  and is rendered by the same in-browser viewer you get on a job page.
+</p>
+<div class="gallery">
+  <figure>
+    <img src="img/structure-gfp.png" alt="Predicted structure of green fluorescent protein">
+    <figcaption><strong>ESMFold2</strong> — green fluorescent protein, 238
+    residues. The beta barrel with its central helix.</figcaption>
+  </figure>
+  <figure>
+    <img src="img/structure-myoglobin.png" alt="Predicted structure of human myoglobin">
+    <figcaption><strong>ESMFold2</strong> — human myoglobin, 154 residues.
+    An all-alpha fold.</figcaption>
+  </figure>
+  <figure>
+    <img src="img/structure-binder-complex.png" alt="A designed binder bound to ubiquitin">
+    <figcaption><strong>BindCraft</strong> — a designed binder on its ubiquitin
+    target, 168 residues across two chains, coloured per chain.</figcaption>
+  </figure>
+  <figure>
+    <img src="img/structure-complexa.png" alt="A Proteina-Complexa binder design">
+    <figcaption><strong>Proteina-Complexa</strong> — binder generation against
+    ubiquitin, two chains.</figcaption>
+  </figure>
+  <figure>
+    <img src="img/structure-rfd3-design.png" alt="An unconditional RFdiffusion3 design">
+    <figcaption><strong>RFdiffusion3</strong> — an unconditional design, 43
+    residues, generated from nothing but a length.</figcaption>
+  </figure>
+  <figure>
+    <img src="img/structure-lysozyme.png" alt="Lysozyme topology from a BioEmu2 ensemble">
+    <figcaption><strong>BioEmu2</strong> — lysozyme, 147 residues. The
+    ensemble's conformations are in the archive as a trajectory.</figcaption>
+  </figure>
+</div>
+
+<h2>When a result is not a structure</h2>
+<p>
+  A job can finish, report success and return a well-formed file that is still
+  not a foldable protein — too few sampling steps will do it. The portal
+  measures the distance between consecutive backbone atoms, which chemistry
+  fixes at about 3.8 &#197;, and tells you when a result does not meet it.
+  Passing that check does not mean the prediction is correct; failing it means
+  the result is certainly unusable.
+</p>
+
 <h2>How a job works</h2>
 <ol class="steps">
   <li><strong>Submit once.</strong> Your request goes into a queue shared with

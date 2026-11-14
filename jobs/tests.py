@@ -621,3 +621,199 @@ class CredentialTests(Base):
         self.assertFalse(ApiCredential.objects.filter(user=self.user).exists())
         job.refresh_from_db()
         self.assertEqual(job.status, Status.RUNNING)
+
+
+class StructureCheckTests(Base):
+    """The portal must notice when a finished job returns an impossible chain."""
+
+    def _pdb(self, spacing: float, n: int = 20, chain: str = "A") -> str:
+        lines = []
+        for i in range(n):
+            lines.append(
+                f"ATOM  {i+1:5d}  CA  ALA {chain}{i+1:4d}    "
+                f"{i * spacing:8.3f}{0.0:8.3f}{0.0:8.3f}  1.00 50.00           C"
+            )
+        return "\n".join(lines) + "\nEND\n"
+
+    def test_real_backbone_spacing_passes(self):
+        from jobs import structure
+
+        report = structure.check_text(self._pdb(3.8))
+        self.assertEqual(report["verdict"], structure.Verdict.OK)
+        self.assertEqual(report["mean_ca_ca"], 3.8)
+        self.assertEqual(report["residues"], 20)
+
+    def test_shredded_chain_is_flagged(self):
+        from jobs import structure
+
+        report = structure.check_text(self._pdb(10.0))
+        self.assertEqual(report["verdict"], structure.Verdict.IMPLAUSIBLE)
+        self.assertEqual(report["plausible_bonds"], 0)
+
+    def test_chains_are_measured_separately(self):
+        """The gap between two chains is not a broken bond."""
+        from jobs import structure
+
+        report = structure.check_text(self._pdb(3.8, chain="A") + self._pdb(3.8, chain="B"))
+        self.assertEqual(report["verdict"], structure.Verdict.OK)
+        self.assertEqual(report["chains"], 2)
+
+    def test_archive_without_structure_is_unknown_not_failed(self):
+        from jobs import structure
+
+        path = Path(self._tmp.name) / "r.zip"
+        import zipfile
+
+        with zipfile.ZipFile(path, "w") as zf:
+            zf.writestr("report.csv", "a,b\n1,2\n")
+        self.assertEqual(structure.check_archive(path)["verdict"], structure.Verdict.UNKNOWN)
+
+    def test_gzipped_cif_is_read(self):
+        """RFdiffusion3 returns compressed mmCIF."""
+        import gzip
+        import zipfile
+
+        from jobs import structure
+
+        cif = "\n".join([
+            "loop_",
+            "_atom_site.label_atom_id",
+            "_atom_site.auth_asym_id",
+            "_atom_site.Cartn_x",
+            "_atom_site.Cartn_y",
+            "_atom_site.Cartn_z",
+        ] + [f"CA A {i * 3.8:.3f} 0.000 0.000" for i in range(10)])
+        path = Path(self._tmp.name) / "r.zip"
+        with zipfile.ZipFile(path, "w") as zf:
+            zf.writestr("designs/d.cif.gz", gzip.compress(cif.encode()))
+        report = structure.check_archive(path)
+        self.assertEqual(report["verdict"], structure.Verdict.OK)
+        self.assertEqual(report["residues"], 10)
+
+    def test_download_records_the_check_and_warns(self):
+        import zipfile
+
+        job = self.make_job(status=Status.COMPLETED, artifact_state=ArtifactState.PENDING)
+        payload_path = Path(self._tmp.name) / "src.zip"
+        with zipfile.ZipFile(payload_path, "w") as zf:
+            zf.writestr("structure.pdb", self._pdb(10.0))
+        payload = payload_path.read_bytes()
+
+        with mock.patch(
+            "jobs.blablador._post",
+            return_value={"total_bytes": len(payload),
+                          "data_base64": base64.b64encode(payload).decode()},
+        ):
+            Command().download_artifacts()
+
+        job.refresh_from_db()
+        self.assertEqual(job.artifact_state, ArtifactState.STORED)
+        self.assertEqual(job.structure_check["verdict"], "implausible")
+        self.assertIn("not a folded structure", job.structure_warning)
+        self.assertTrue(
+            JobEvent.objects.filter(job=job, kind="structure-implausible").exists()
+        )
+
+    def test_warning_is_shown_on_the_job_page(self):
+        job = self.make_job(
+            status=Status.COMPLETED,
+            artifact_state=ArtifactState.STORED,
+            artifact_path=str(Path(self._tmp.name) / "r.zip"),
+            structure_check={"verdict": "implausible", "bonds": 75,
+                             "plausible_bonds": 7, "mean_ca_ca": 10.0},
+        )
+        resp = self.client.get(reverse("jobs:status", args=[job.pk]))
+        self.assertContains(resp, "does not look like a real structure")
+
+    def test_low_sampling_settings_are_refused_before_submission(self):
+        spec = get_spec("esmfold2")
+        form = spec.form_class({"sequence": SEQ, "num_loops": 1, "steps": 10})
+        self.assertFalse(form.is_valid())
+        self.assertIn("steps", form.errors)
+
+    def test_documented_defaults_are_accepted(self):
+        spec = get_spec("esmfold2")
+        form = spec.form_class({"sequence": SEQ, "num_loops": 3, "steps": 50})
+        self.assertTrue(form.is_valid(), form.errors)
+
+
+class PreviewTests(Base):
+    """The in-page viewer is fed PDB prepared server-side."""
+
+    def _archive(self, name: str, content: bytes) -> Path:
+        import zipfile
+
+        path = Path(self._tmp.name) / f"{name.replace('/', '_')}.zip"
+        with zipfile.ZipFile(path, "w") as zf:
+            zf.writestr(name, content)
+        return path
+
+    def test_mmcif_is_converted_to_pdb(self):
+        from jobs import structure
+
+        cif = "\n".join([
+            "loop_",
+            "_atom_site.group_PDB",
+            "_atom_site.label_atom_id",
+            "_atom_site.label_comp_id",
+            "_atom_site.auth_asym_id",
+            "_atom_site.auth_seq_id",
+            "_atom_site.Cartn_x",
+            "_atom_site.Cartn_y",
+            "_atom_site.Cartn_z",
+            "_atom_site.type_symbol",
+            "ATOM CA ALA A 1 1.000 2.000 3.000 C",
+            "ATOM CA GLY A 2 4.800 2.000 3.000 C",
+        ])
+        pdb = structure.cif_to_pdb(cif)
+        lines = [l for l in pdb.splitlines() if l.startswith("ATOM")]
+        self.assertEqual(len(lines), 2)
+        # Fixed-column PDB: coordinates must land in columns 31-54.
+        self.assertEqual(lines[0][30:38].strip(), "1.000")
+        self.assertEqual(lines[0][17:20], "ALA")
+        self.assertEqual(lines[0][21], "A")
+        # And it must round-trip through our own reader.
+        self.assertEqual(structure.check_text(pdb)["residues"], 2)
+
+    def test_gzipped_structure_is_decompressed(self):
+        import gzip
+
+        from jobs import structure
+
+        pdb = "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00  0.00           C\nEND\n"
+        archive = self._archive("d.pdb.gz", gzip.compress(pdb.encode()))
+        name, text = structure.extract_preview(archive)
+        self.assertTrue(name.endswith(".gz"))
+        self.assertIn("ATOM", text)
+
+    def test_preview_endpoint_serves_pdb(self):
+        pdb = b"ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00  0.00           C\nEND\n"
+        archive = self._archive("structure.pdb", pdb)
+        job = self.make_job(
+            status=Status.COMPLETED,
+            artifact_state=ArtifactState.STORED,
+            artifact_path=str(archive),
+        )
+        resp = self.client.get(reverse("jobs:preview", args=[job.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp["Content-Type"], "chemical/x-pdb")
+        self.assertIn(b"ATOM", resp.content)
+
+    def test_preview_is_owner_only(self):
+        bob = User.objects.create_user("bob", "bob@x.de", "pw")
+        ApiCredential.store(bob, "bob-personal-key-0123456789")
+        job = self.make_job(owner=bob, status=Status.COMPLETED,
+                            artifact_state=ArtifactState.STORED,
+                            artifact_path="/etc/passwd")
+        self.assertEqual(
+            self.client.get(reverse("jobs:preview", args=[job.pk])).status_code, 404
+        )
+
+    def test_preview_404s_when_archive_has_no_structure(self):
+        archive = self._archive("report.csv", b"a,b\n1,2\n")
+        job = self.make_job(status=Status.COMPLETED,
+                            artifact_state=ArtifactState.STORED,
+                            artifact_path=str(archive))
+        self.assertEqual(
+            self.client.get(reverse("jobs:preview", args=[job.pk])).status_code, 404
+        )

@@ -28,9 +28,20 @@ SHOTS = [
     ("/", "home", None, True),
     ("/models/esmfold2/", "submit-esmfold2", "form.jobform", True),
     ("/jobs/", "job-list", "table.jobs", False),
-    ("/jobs/6/", "job-detail", "#viewer canvas", False),
+    ("/jobs/7/", "job-detail", "#viewer canvas", False),
     ("/queue/", "queue", "table.jobs", False),
     ("/account/key/", "api-key", "form.jobform", False),
+]
+
+# Structures worth showing on their own, cropped to the viewer: (job, name).
+GALLERY = [
+    (7, "structure-gfp"),
+    (8, "structure-myoglobin"),
+    (6, "structure-ubiquitin"),
+    (9, "structure-lysozyme"),
+    (5, "structure-binder-complex"),
+    (4, "structure-complexa"),
+    (3, "structure-rfd3-design"),
 ]
 
 
@@ -66,6 +77,28 @@ def main() -> int:
                 suffix = "" if theme == "light" else "-dark"
                 target = OUT / f"{name}{suffix}.png"
                 page.screenshot(path=str(target), full_page=full)
+                print(f"  {target.relative_to(OUT.parent.parent)}")
+
+            # The structures on their own, cropped to the viewer.
+            for job_id, name in GALLERY:
+                page.goto(f"{BASE}/jobs/{job_id}/", wait_until="networkidle")
+                try:
+                    page.wait_for_selector("#viewer canvas", timeout=25000)
+                except Exception as exc:  # noqa: BLE001
+                    print(f"  ! {name}: no canvas: {exc}")
+                    continue
+                # A square frame so the structure fills the crop.
+                page.evaluate("""() => {
+                  const el = document.getElementById('viewer');
+                  el.style.height = '620px';
+                  el.style.maxWidth = '620px';
+                  el.style.margin = '0';
+                  window.dispatchEvent(new Event('resize'));
+                }""")
+                page.wait_for_timeout(3000)
+                suffix = "" if theme == "light" else "-dark"
+                target = OUT / f"{name}{suffix}.png"
+                page.locator("#viewer").screenshot(path=str(target))
                 print(f"  {target.relative_to(OUT.parent.parent)}")
             ctx.close()
         browser.close()

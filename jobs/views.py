@@ -9,7 +9,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -250,6 +250,27 @@ def download(request, pk):
         filename=f"{job.spec.slug}-{job.pk}.zip",
         content_type="application/zip",
     )
+
+
+@login_required
+def preview(request, pk):
+    """The job's largest structure as PDB, for the in-page viewer.
+
+    Extraction, decompression and mmCIF conversion happen here because the
+    browser's mmCIF parser rejects the minimal CIF these models emit.
+    """
+    from jobs import structure
+
+    job = _owned(request, pk)
+    if job.artifact_state != ArtifactState.STORED or not job.artifact_path:
+        raise Http404("no stored result for this job")
+    found = structure.extract_preview(Path(job.artifact_path))
+    if not found:
+        raise Http404("no structure in this archive")
+    name, text = found
+    resp = HttpResponse(text, content_type="chemical/x-pdb")
+    resp["X-Structure-Source"] = name
+    return resp
 
 
 @login_required

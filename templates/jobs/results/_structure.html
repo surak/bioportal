@@ -1,41 +1,38 @@
-<div id="viewer" class="viewer" data-url="{% url 'jobs:download' job.pk %}"></div>
+<div id="viewer" class="viewer" data-url="{% url 'jobs:preview' job.pk %}"></div>
 <p class="hint">
-  Preview of <code>structure.pdb</code> from the archive, rendered in your browser.
+  Largest structure in the archive, rendered in your browser. Rotate by
+  dragging; scroll to zoom.
 </p>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ngl/2.3.1/ngl.js"></script>
 <script>
 (function () {
   var el = document.getElementById("viewer");
-  if (!el || !window.NGL || !window.JSZip) return;
-  // The result is a ZIP; pull the first structure out of it client-side.
+  if (!el || !window.NGL) return;
+  var stage = new NGL.Stage(el, {backgroundColor: "white"});
+  window.addEventListener("resize", function () { stage.handleResize(); });
+
   fetch(el.dataset.url, {credentials: "same-origin"})
-    .then(function (r) { return r.arrayBuffer(); })
-    .then(JSZip.loadAsync)
-    .then(function (zip) {
-      var name = Object.keys(zip.files).find(function (n) {
-        return /\.(pdb|cif)$/i.test(n) && !zip.files[n].dir;
-      });
-      if (!name) throw new Error("no structure in archive");
-      return zip.files[name].async("string").then(function (text) {
-        var stage = new NGL.Stage(el, {backgroundColor: "white"});
-        var ext = name.toLowerCase().endsWith("cif") ? "cif" : "pdb";
-        var blob = new Blob([text], {type: "text/plain"});
-        return stage.loadFile(blob, {ext: ext}).then(function (c) {
-          // Predicted structures often carry no HELIX/SHEET records, and the
-          // cartoon representation then draws nothing at all. Fall back to a
-          // backbone trace rather than showing an empty viewer.
-          var rep = c.addRepresentation("cartoon", {colorScheme: "bfactor"});
-          if (!rep.repr.bufferList.length) {
-            c.removeRepresentation(rep);
-            c.addRepresentation("backbone", {colorScheme: "bfactor"});
-          }
-          // Ligands and ions are never part of a cartoon or backbone trace.
-          c.addRepresentation("ball+stick", {sele: "hetero and not water"});
-          c.autoView();
-          window.addEventListener("resize", function () { stage.handleResize(); });
-        });
-      });
+    .then(function (r) {
+      if (!r.ok) throw new Error("no preview available");
+      return r.text();
+    })
+    .then(function (text) {
+      var blob = new Blob([text], {type: "text/plain"});
+      return stage.loadFile(blob, {ext: "pdb"});
+    })
+    .then(function (c) {
+      // Colour complexes by chain so a binder is distinguishable from its
+      // target; a single chain keeps the per-residue confidence colouring.
+      var scheme = c.structure.chainStore.count > 1 ? "chainname" : "bfactor";
+      var rep = c.addRepresentation("cartoon", {colorScheme: scheme});
+      if (!rep.repr.bufferList.length) {
+        // Predicted structures carry no HELIX/SHEET records, and the cartoon
+        // representation then draws nothing at all.
+        c.removeRepresentation(rep);
+        c.addRepresentation("backbone", {colorScheme: scheme});
+      }
+      c.addRepresentation("ball+stick", {sele: "hetero and not water"});
+      c.autoView();
     })
     .catch(function (err) {
       el.innerHTML = '<p class="hint">No inline preview available (' +

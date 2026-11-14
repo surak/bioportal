@@ -12,6 +12,7 @@ urlpatterns = [
     path("jobs/<int:pk>/status/", views.status_fragment, name="status"),
     path("jobs/<int:pk>/cancel/", views.cancel, name="cancel"),
     path("jobs/<int:pk>/result.zip", views.download, name="download"),
+    path("jobs/<int:pk>/preview.pdb", views.preview, name="preview"),
     path("queue/", views.queue_status, name="queue"),
     path("account/key/", views.credential, name="credential"),
     path("models/<slug:slug>/", views.submit, name="submit"),

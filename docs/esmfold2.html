@@ -21,7 +21,7 @@
 <div class='callout warn'><h2>Before you run this</h2><ul><li>Produces exactly one prediction. The sequence path ignores sample count and seed.</li></ul></div>
 
 <h2>Inputs</h2>
-<table><thead><tr><th>Field</th><th>Shown as</th><th>Required</th><th>Default</th><th>Accepted</th><th>Notes</th></tr></thead><tbody><tr><td><code>sequence</code></td><td>Protein sequence</td><td>yes</td><td>—</td><td>—</td><td>FASTA or bare one-letter sequence.</td></tr><tr><td><code>num_loops</code></td><td>Loops</td><td>yes</td><td>3</td><td>min 1, max 8</td><td>1-8. More loops, slower.</td></tr><tr><td><code>steps</code></td><td>steps</td><td>yes</td><td>50</td><td>min 1, max 1000</td><td></td></tr></tbody></table>
+<table><thead><tr><th>Field</th><th>Shown as</th><th>Required</th><th>Default</th><th>Accepted</th><th>Notes</th></tr></thead><tbody><tr><td><code>sequence</code></td><td>Protein sequence</td><td>yes</td><td>—</td><td>—</td><td>FASTA or bare one-letter sequence.</td></tr><tr><td><code>num_loops</code></td><td>Loops</td><td>yes</td><td>3</td><td>min 1, max 8</td><td>1-8. More loops, slower, generally better.</td></tr><tr><td><code>steps</code></td><td>steps</td><td>yes</td><td>50</td><td>min 1, max 1000</td><td>Sampling steps. Low values finish quickly but can return a structure that is not physically foldable.</td></tr></tbody></table>
 
 <h2>Results</h2>
 <p>The result archive contains structure.pdb.</p>

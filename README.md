@@ -8,8 +8,24 @@ submit a job, close the tab, and come back — or get an email — when it's don
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/job-detail-dark.png">
-  <img src="docs/img/job-detail.png" alt="A finished ESMFold2 job showing the predicted ubiquitin structure and a download link">
+  <img src="docs/img/job-detail.png" alt="A finished ESMFold2 job showing a predicted structure and a download link">
 </picture>
+
+Structures produced through the portal against the live service, rendered by
+its in-browser viewer:
+
+<table>
+<tr>
+<td width="33%"><img src="docs/img/structure-gfp.png" alt="Green fluorescent protein predicted by ESMFold2"></td>
+<td width="33%"><img src="docs/img/structure-binder-complex.png" alt="A designed binder bound to ubiquitin"></td>
+<td width="33%"><img src="docs/img/structure-myoglobin.png" alt="Human myoglobin predicted by ESMFold2"></td>
+</tr>
+<tr>
+<td align="center"><sub><b>ESMFold2</b> — GFP, 238 residues</sub></td>
+<td align="center"><sub><b>BindCraft</b> — designed binder on ubiquitin, 2 chains</sub></td>
+<td align="center"><sub><b>ESMFold2</b> — myoglobin, 154 residues</sub></td>
+</tr>
+</table>
 
 <table>
 <tr>
@@ -86,6 +102,20 @@ same offset with jittered backoff.
 touch `consecutive_poll_errors` and `poll_after`; job status is left alone and
 the page says "we can't reach the service, your job is unaffected". 404 is the
 one exception — the job is genuinely gone.
+
+**A finished job is not a sound result.** `jobs/structure.py` measures the
+distance between consecutive alpha carbons, which covalent geometry fixes near
+3.8 A. A chain averaging 10 A is not folded. The check runs on every downloaded
+archive, is shown on the job page when it fails, and is recorded as a job
+event. ESMFold2's form also refuses step/loop combinations observed to produce
+unfoldable output, so the GPU time is never spent. Passing says the backbone is
+connected, not that the prediction is right.
+
+**Structure previews are prepared server-side.** The browser's mmCIF parser
+rejects the minimal CIF these models emit, and RFdiffusion3 returns it gzipped,
+so `/jobs/<id>/preview.pdb` extracts the largest structure from the archive,
+decompresses it, converts mmCIF to PDB and serves that. The viewer is then just
+NGL over plain PDB, with no archive handling in the browser.
 
 **No upstream job list exists.** Our database is the only record of who owns
 which job ID, which is also why `/jobs/` is per-user and there is no global job
