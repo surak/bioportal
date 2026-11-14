@@ -268,7 +268,7 @@ def operating_page(specs) -> str:
         "Running the portal",
         """
 <h1>Running the portal</h1>
-<p class="lede">For whoever operates this deployment.</p>
+<p class="lede">How the deployment fits together, and what to change when it needs tuning.</p>
 
 <h2>Two processes</h2>
 <p>
