@@ -40,6 +40,14 @@ class BlabladorError(RuntimeError):
         self.transient = transient
 
 
+class MissingCredential(BlabladorError):
+    """The user has not stored an API key yet."""
+
+
+class InvalidCredential(BlabladorError):
+    """401/403 - the user's key was rejected and must be replaced."""
+
+
 class JobGone(BlabladorError):
     """404 — the job or its artifact has expired out of retention."""
 
@@ -52,9 +60,9 @@ class ModelNotReady(BlabladorError):
     """503 — no worker is currently validated for this model."""
 
 
-def _post(model: str, action: dict[str, Any]) -> dict[str, Any]:
-    if not settings.BLABLADOR_API_KEY:
-        raise BlabladorError("BLABLADOR_API_KEY is not configured")
+def _post(api_key: str, model: str, action: dict[str, Any]) -> dict[str, Any]:
+    if not api_key:
+        raise MissingCredential("no Blablador API key is stored for this user")
 
     body = json.dumps(
         {"model": model, "stream": False, "input": json.dumps(action)}
@@ -63,7 +71,7 @@ def _post(model: str, action: dict[str, Any]) -> dict[str, Any]:
         f"{settings.BLABLADOR_API_BASE.rstrip('/')}/responses",
         data=body,
         headers={
-            "Authorization": f"Bearer {settings.BLABLADOR_API_KEY}",
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
             "Cache-Control": "no-store",
         },
@@ -119,8 +127,8 @@ def _http_error(code: int, body: str, action: str) -> BlabladorError:
         return ModelNotReady(
             "no worker is ready for this model right now", status=503, transient=True
         )
-    if code == 401:
-        return BlabladorError("Blablador rejected the API key", status=401)
+    if code in (401, 403):
+        return InvalidCredential("Blablador rejected this API key", status=code)
     if code == 400:
         return BlabladorError(f"rejected: {detail}", status=400)
     return BlabladorError(
@@ -131,32 +139,32 @@ def _http_error(code: int, body: str, action: str) -> BlabladorError:
 # --- actions --------------------------------------------------------------
 
 
-def submit(model: str, request_id: str, parameters: dict) -> dict:
+def submit(api_key: str, model: str, request_id: str, parameters: dict) -> dict:
     """Submit. Safe to retry with the same request_id and parameters.
 
     The server derives a stable job ID from (request_id, model), so an
     ambiguous network failure is recovered by repeating the identical call.
     """
-    return _post(model, {
+    return _post(api_key, model, {
         "action": "submit",
         "request_id": request_id,
         "parameters": parameters,
     })
 
 
-def status(model: str, job_id: str) -> dict:
-    return _post(model, {"action": "status", "job_id": job_id})
+def status(api_key: str, model: str, job_id: str) -> dict:
+    return _post(api_key, model, {"action": "status", "job_id": job_id})
 
 
-def cancel(model: str, job_id: str) -> dict:
-    return _post(model, {"action": "cancel", "job_id": job_id})
+def cancel(api_key: str, model: str, job_id: str) -> dict:
+    return _post(api_key, model, {"action": "cancel", "job_id": job_id})
 
 
-def queue(model: str) -> dict:
-    return _post(model, {"action": "queue"})
+def queue(api_key: str, model: str) -> dict:
+    return _post(api_key, model, {"action": "queue"})
 
 
-def fetch_artifact(model: str, job_id: str, dest: Path) -> int:
+def fetch_artifact(api_key: str, model: str, job_id: str, dest: Path) -> int:
     """Stream the result ZIP to `dest`, one chunk at a time.
 
     Written to a .part file and renamed only once total_bytes have arrived, so
@@ -171,7 +179,7 @@ def fetch_artifact(model: str, job_id: str, dest: Path) -> int:
     with open(part, "wb") as fh:
         while total is None or offset < total:
             try:
-                chunk = _post(model, {
+                chunk = _post(api_key, model, {
                     "action": "artifact",
                     "job_id": job_id,
                     "offset": offset,

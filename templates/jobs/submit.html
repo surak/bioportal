@@ -12,6 +12,19 @@
   </div>
 {% endif %}
 
+{% if needs_key %}
+  <div class="notice warn">
+    <strong>
+      {% if credential %}Your API key was rejected.{% else %}You need a Blablador API key.{% endif %}
+    </strong>
+    <p>
+      Jobs run against your own key so the GPU time is metered to you.
+      <a href="{% url 'jobs:credential' %}">{% if credential %}Replace your key{% else %}Add your key{% endif %}</a>
+      to submit jobs.
+    </p>
+  </div>
+{% endif %}
+
 {% if at_quota %}
   <p class="notice warn">
     You have {{ active }} jobs in flight, this portal's limit.
@@ -28,6 +41,19 @@
     Results are kept for 48 hours by the service; we copy them to this portal
     as soon as your job finishes.
   </p>
-  <button type="submit" {% if at_quota %}disabled{% endif %}>Submit to the queue</button>
+  <button type="submit" {% if needs_key %}
+  <div class="notice warn">
+    <strong>
+      {% if credential %}Your API key was rejected.{% else %}You need a Blablador API key.{% endif %}
+    </strong>
+    <p>
+      Jobs run against your own key so the GPU time is metered to you.
+      <a href="{% url 'jobs:credential' %}">{% if credential %}Replace your key{% else %}Add your key{% endif %}</a>
+      to submit jobs.
+    </p>
+  </div>
+{% endif %}
+
+{% if at_quota %}disabled{% endif %}>Submit to the queue</button>
 </form>
 {% endblock %}

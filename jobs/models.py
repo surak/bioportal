@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import datetime as dt
+import logging
 
 from django.conf import settings
 from django.db import models
 from django.urls import reverse
 from django.utils import timezone
+
+log = logging.getLogger(__name__)
 
 
 class Status(models.TextChoices):
@@ -191,6 +194,67 @@ class Job(models.Model):
             changed.append("artifact_state")
 
         return changed
+
+
+class ApiCredential(models.Model):
+    """A user's own Blablador API key, encrypted at rest.
+
+    Stored rather than session-held because the reconciler needs it to poll and
+    download results hours after the user has closed the browser.
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="credential"
+    )
+    encrypted_key = models.TextField()
+    # First 8 hex of a SHA-256 digest, so a user can recognise which key is
+    # stored without the portal ever showing it back.
+    fingerprint = models.CharField(max_length=16)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    # Set when the service rejects the key, so we stop retrying and tell them.
+    rejected_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self) -> str:
+        return f"{self.user} key {self.fingerprint}"
+
+    @property
+    def is_rejected(self) -> bool:
+        return self.rejected_at is not None
+
+    def reveal(self) -> str:
+        from jobs import credentials
+
+        return credentials.decrypt(self.encrypted_key)
+
+    @classmethod
+    def store(cls, user, api_key: str) -> "ApiCredential":
+        from jobs import credentials
+
+        obj, _ = cls.objects.update_or_create(
+            user=user,
+            defaults={
+                "encrypted_key": credentials.encrypt(api_key),
+                "fingerprint": credentials.fingerprint(api_key),
+                "rejected_at": None,
+            },
+        )
+        return obj
+
+
+def key_for(user) -> str | None:
+    """The user's decrypted key, or None if absent or undecryptable."""
+    from jobs import credentials
+
+    cred = getattr(user, "credential", None)
+    if cred is None:
+        return None
+    try:
+        return cred.reveal()
+    except credentials.CredentialError:
+        log.error("could not decrypt stored credential for user %s", user.pk)
+        return None
 
 
 class JobEvent(models.Model):

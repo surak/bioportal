@@ -22,7 +22,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from jobs import blablador, registry
-from jobs.models import ArtifactState, Job, Status
+from jobs.models import ApiCredential, ArtifactState, Job, Status, key_for
 
 UBIQUITIN = (
     "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG"
@@ -40,7 +40,17 @@ class Command(BaseCommand):
         parser.add_argument("--timeout", type=int, default=600)
         parser.add_argument("--user", default="admin")
 
+    def _key(self, username: str) -> str:
+        key = key_for(User.objects.get(username=username))
+        if not key:
+            raise SystemExit(
+                f"user {username} has no stored API key; add one at /account/key/ "
+                "or with manage.py setkey"
+            )
+        return key
+
     def handle(self, *args, **opts):
+        self.api_key = self._key(opts["user"])
         if opts["discover"]:
             self.discover()
         if opts["queue"]:
@@ -56,7 +66,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.MIGRATE_HEADING("GET /v1/models"))
         req = urllib.request.Request(
             f"{settings.BLABLADOR_API_BASE.rstrip('/')}/models",
-            headers={"Authorization": f"Bearer {settings.BLABLADOR_API_KEY}"},
+            headers={"Authorization": f"Bearer {self.api_key}"},
         )
         with urllib.request.urlopen(req, timeout=30) as resp:
             payload = json.loads(resp.read().decode())
@@ -72,7 +82,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.MIGRATE_HEADING("queue action"))
         for spec in registry.all_specs():
             try:
-                q = blablador.queue(spec.alias)
+                q = blablador.queue(self.api_key, spec.alias)
             except blablador.BlabladorError as exc:
                 self.stdout.write(f"  FAIL {spec.alias}: {exc}")
                 continue
@@ -100,7 +110,7 @@ class Command(BaseCommand):
         )
         self.stdout.write(f"  job {job.pk} ({spec.name}) request_id={job.request_id}")
         try:
-            remote = blablador.submit(spec.alias, str(job.request_id), params)
+            remote = blablador.submit(self.api_key, spec.alias, str(job.request_id), params)
         except blablador.BlabladorError as exc:
             job.status = Status.SUBMIT_FAILED
             job.error = str(exc)

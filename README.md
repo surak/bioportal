@@ -20,9 +20,18 @@ browser ──POST──► Django ──POST /v1/responses──► Blablador s
                      └──► completion email
 ```
 
-The browser never talks to Blablador. CORS and direct-browser credential
-handling weren't validated in that deployment, and the API key belongs to the
-server, so every action is proxied.
+The browser never talks to Blablador: CORS and direct-browser credential
+handling weren't validated in that deployment, so every action is proxied.
+
+**Each user supplies their own Blablador API key**, so GPU time meters to their
+account rather than a shared service credential. Keys are encrypted at rest
+with `CREDENTIAL_ENCRYPTION_KEY` (Fernet, held in the environment, never in the
+database), shown back only as an 8-character fingerprint, and never logged.
+They must be *stored* rather than session-held, because the reconciler needs
+them to poll and download results long after the user has closed the browser —
+that tradeoff is stated plainly on the key page. A rejected key is flagged and
+the user is asked to replace it; their running jobs are left alone, since the
+computation is unaffected by us being unable to watch it.
 
 Each action is `POST /v1/responses` with `stream: false` and `input` as a JSON
 **string**. The outer response completing means the *API action* completed —
@@ -148,6 +157,44 @@ WantedBy=multi-user.target
 
 Run exactly one reconciler. `ARTIFACT_ROOT` needs room for 48 hours of results
 and should be backed up or pruned on your own schedule.
+
+## Deployment (blablador-import)
+
+Deployed to the `bioportal` namespace of the `blablador-import` cluster:
+
+```bash
+docker buildx build --platform linux/amd64 \
+  -t registry.jsc.fz-juelich.de/kaas/rke2-clusters/blablador/bioportal:<tag> --push .
+kubectl -n bioportal apply -f k8s/
+```
+
+The cluster is amd64; building on an Apple Silicon machine without
+`--platform linux/amd64` produces an image that fails with
+`exec format error`.
+
+| Piece | Notes |
+|---|---|
+| `bioportal-web` | 2 replicas, gunicorn + WhiteNoise. Migrations run in an init container, once per rollout. |
+| `bioportal-reconcile` | **Exactly 1 replica.** A second would duplicate artifact downloads and completion emails. |
+| `bioportal-db` | Postgres 16 on a 10 Gi Longhorn volume. |
+| `bioportal-artifacts` | 100 Gi, **ReadWriteMany** — the reconciler writes archives and both web replicas serve them, so RWO deadlocks as soon as pods land on different nodes. |
+| Ingress | Traefik, `bioportal.blablador.fz-juelich.de`, cert-manager `letsencrypt-prod-cluster`. |
+
+`k8s/config.yaml` is committed; the Secret is not. Create it once:
+
+```bash
+kubectl -n bioportal create secret generic bioportal-secrets \
+  --from-literal=DJANGO_SECRET_KEY="$(python -c 'import secrets;print(secrets.token_urlsafe(50))')" \
+  --from-literal=DB_PASSWORD="$(python -c 'import secrets;print(secrets.token_urlsafe(24))')" \
+  --from-literal=CREDENTIAL_ENCRYPTION_KEY="$(python -c 'from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())')"
+```
+
+`CREDENTIAL_ENCRYPTION_KEY` must stay stable: rotating it makes every stored
+user API key undecryptable and everyone must re-enter theirs.
+
+Probes hit `/healthz`, which touches no database — a Postgres blip should not
+make Kubernetes kill every web pod. They pass an explicit `Host` header because
+`ALLOWED_HOSTS` is deliberately strict and kube-probe otherwise sends the pod IP.
 
 ## Authentication
 

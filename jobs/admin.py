@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from jobs.models import ArtifactState, Job, JobEvent, Status
+from jobs.models import ApiCredential, ArtifactState, Job, JobEvent, Status
 
 
 class JobEventInline(admin.TabularInline):
@@ -56,3 +56,20 @@ class JobEventAdmin(admin.ModelAdmin):
     list_display = ("job", "at", "kind", "detail")
     list_filter = ("kind",)
     search_fields = ("job__id", "detail")
+
+
+@admin.register(ApiCredential)
+class ApiCredentialAdmin(admin.ModelAdmin):
+    """Shows that a key exists and whether it works - never the key itself."""
+
+    list_display = ("user", "fingerprint", "created_at", "last_used_at", "rejected_at")
+    list_filter = ("rejected_at",)
+    search_fields = ("user__username", "user__email", "fingerprint")
+    readonly_fields = ("fingerprint", "created_at", "updated_at", "last_used_at")
+    # encrypted_key is deliberately excluded from the form entirely.
+    fields = ("user", "fingerprint", "created_at", "updated_at", "last_used_at",
+              "rejected_at")
+
+    def has_add_permission(self, request):
+        # Keys are added by their owner, or via manage.py setkey.
+        return False

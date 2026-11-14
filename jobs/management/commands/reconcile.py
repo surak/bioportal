@@ -27,7 +27,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from jobs import blablador, notify
-from jobs.models import ArtifactState, Job, JobEvent, Status
+from jobs.models import ApiCredential, ArtifactState, Job, JobEvent, Status, key_for
 
 log = logging.getLogger(__name__)
 
@@ -83,14 +83,20 @@ class Command(BaseCommand):
         cutoff = timezone.now() - dt.timedelta(seconds=30)
         stuck = Job.objects.filter(
             status=Status.PENDING, remote_job_id="", created_at__lt=cutoff
-        )[:20]
+        ).select_related("owner__credential")[:20]
         for job in stuck:
             if job.poll_after and job.poll_after > timezone.now():
                 continue
             try:
                 remote = blablador.submit(
-                    job.spec.alias, str(job.request_id), job.parameters
+                    key_for(job.owner),
+                    job.spec.alias,
+                    str(job.request_id),
+                    job.parameters,
                 )
+            except blablador.InvalidCredential as exc:
+                self._reject_credential(job, exc)
+                continue
             except blablador.BlabladorError as exc:
                 self._record_poll_error(job, exc, context="resubmit")
                 continue
@@ -100,12 +106,20 @@ class Command(BaseCommand):
 
     def poll_active(self) -> None:
         now = timezone.now()
-        due = Job.objects.filter(status__in=Status.active()).exclude(remote_job_id="")
+        due = Job.objects.filter(status__in=Status.active()).exclude(
+            remote_job_id=""
+        ).select_related("owner__credential")
         due = due.filter(poll_after__isnull=True) | due.filter(poll_after__lte=now)
 
         for job in due.distinct()[:200]:
             try:
-                remote = blablador.status(job.spec.alias, job.remote_job_id)
+                remote = blablador.status(
+                    key_for(job.owner), job.spec.alias, job.remote_job_id
+                )
+            except blablador.InvalidCredential as exc:
+                # The owner's key stopped working; their job keeps running on
+                # the service, but we cannot watch it until they replace it.
+                self._reject_credential(job, exc)
             except blablador.JobGone as exc:
                 # Past retention, or never existed. Not a computation failure,
                 # but there is nothing left to wait for.
@@ -169,6 +183,25 @@ class Command(BaseCommand):
         Job.objects.filter(pk=job.pk).update(**updates)
         log.warning("%s error on job %s (attempt %d): %s", context, job.pk, attempts, exc)
 
+    def _reject_credential(self, job: Job, exc: Exception) -> None:
+        """Flag the owner's key as rejected and stop hammering the service.
+
+        The job itself is left alone: it is still running on the service, we
+        simply cannot see it until the user supplies a working key.
+        """
+        updated = ApiCredential.objects.filter(
+            user=job.owner, rejected_at__isnull=True
+        ).update(rejected_at=timezone.now())
+        if updated:
+            JobEvent.objects.create(
+                job=job, kind="credential-rejected", detail=str(exc)[:300]
+            )
+            log.warning("API key for user %s was rejected by the service", job.owner_id)
+        Job.objects.filter(pk=job.pk).update(
+            poll_after=timezone.now() + dt.timedelta(seconds=MAX_BACKOFF_SECONDS),
+            last_poll_error=str(exc)[:500],
+        )
+
     def _mark_gone(self, job: Job, detail: str) -> None:
         Job.objects.filter(pk=job.pk).update(
             status=Status.FAILED if not job.is_terminal else job.status,
@@ -185,13 +218,18 @@ class Command(BaseCommand):
         """Fetch results promptly: upstream deletes them 48 hours after finishing."""
         pending = Job.objects.filter(
             status=Status.COMPLETED, artifact_state=ArtifactState.PENDING
-        ).exclude(remote_job_id="")[:5]
+        ).exclude(remote_job_id="").select_related("owner__credential")[:5]
 
         for job in pending:
             dest = Path(settings.ARTIFACT_ROOT) / str(job.pk) / blablador.ARTIFACT_FILENAME
             Job.objects.filter(pk=job.pk).update(artifact_state=ArtifactState.DOWNLOADING)
             try:
-                size = blablador.fetch_artifact(job.spec.alias, job.remote_job_id, dest)
+                size = blablador.fetch_artifact(
+                    key_for(job.owner), job.spec.alias, job.remote_job_id, dest
+                )
+            except blablador.InvalidCredential as exc:
+                Job.objects.filter(pk=job.pk).update(artifact_state=ArtifactState.PENDING)
+                self._reject_credential(job, exc)
             except blablador.JobGone:
                 Job.objects.filter(pk=job.pk).update(artifact_state=ArtifactState.EXPIRED)
                 JobEvent.objects.create(job=job, kind="artifact-expired")

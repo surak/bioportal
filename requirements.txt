@@ -3,3 +3,5 @@ mozilla-django-oidc>=4.0
 python-dotenv>=1.0
 psycopg[binary]>=3.2
 gunicorn>=22.0
+cryptography>=43.0
+whitenoise>=6.7

@@ -15,7 +15,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from jobs import blablador, forms as jobforms, registry
-from jobs.models import ArtifactState, Job, JobEvent, Status
+from jobs.models import ApiCredential, ArtifactState, Job, JobEvent, Status, key_for
 
 log = logging.getLogger(__name__)
 
@@ -36,10 +36,17 @@ def submit(request, slug):
     spec = _spec_or_404(slug)
     active = Job.objects.filter(owner=request.user, status__in=Status.active()).count()
     at_quota = active >= settings.MAX_ACTIVE_JOBS_PER_USER
+    credential = getattr(request.user, "credential", None)
+    needs_key = credential is None or credential.is_rejected
 
     if request.method == "POST":
         form = spec.form_class(request.POST, request.FILES)
-        if at_quota:
+        if needs_key:
+            messages.error(
+                request,
+                "Add your own Blablador API key before submitting jobs.",
+            )
+        elif at_quota:
             messages.error(
                 request,
                 f"You have {active} jobs in flight, which is this portal's limit "
@@ -58,7 +65,14 @@ def submit(request, slug):
     return render(
         request,
         "jobs/submit.html",
-        {"spec": spec, "form": form, "at_quota": at_quota, "active": active},
+        {
+            "spec": spec,
+            "form": form,
+            "at_quota": at_quota,
+            "active": active,
+            "needs_key": needs_key,
+            "credential": credential,
+        },
     )
 
 
@@ -85,7 +99,21 @@ def _create_and_submit(request, spec, form) -> Job:
         JobEvent.objects.create(job=job, kind="created")
 
     try:
-        remote = blablador.submit(spec.alias, str(job.request_id), job.parameters)
+        remote = blablador.submit(
+            key_for(request.user), spec.alias, str(job.request_id), job.parameters
+        )
+    except blablador.InvalidCredential as exc:
+        ApiCredential.objects.filter(user=request.user).update(
+            rejected_at=timezone.now()
+        )
+        job.status = Status.SUBMIT_FAILED
+        job.error = str(exc)
+        job.save(update_fields=["status", "error"])
+        messages.error(
+            request,
+            "Blablador rejected your API key. Update it and submit again.",
+        )
+        return job
     except blablador.QueueFull:
         # Leave it PENDING; the reconciler retries with the same request_id.
         job.poll_after = timezone.now()
@@ -188,7 +216,9 @@ def cancel(request, pk):
         return redirect(job)
 
     try:
-        remote = blablador.cancel(job.spec.alias, job.remote_job_id)
+        remote = blablador.cancel(
+            key_for(request.user), job.spec.alias, job.remote_job_id
+        )
     except blablador.BlabladorError as exc:
         messages.error(request, f"Could not request cancellation: {exc}")
     else:
@@ -226,9 +256,66 @@ def download(request, pk):
 def queue_status(request):
     """Aggregate queue counts. Not a list of anyone's jobs — none is exposed."""
     snapshots = {}
+    api_key = key_for(request.user)
     for spec in registry.all_specs():
         try:
-            snapshots[spec] = blablador.queue(spec.alias)
+            snapshots[spec] = blablador.queue(api_key, spec.alias)
         except blablador.BlabladorError as exc:
             snapshots[spec] = {"error": str(exc)}
     return render(request, "jobs/queue.html", {"snapshots": snapshots})
+
+
+@login_required
+def credential(request):
+    """Where a user stores, replaces or removes their own Blablador key."""
+    from jobs.forms import ApiKeyForm
+
+    existing = getattr(request.user, "credential", None)
+
+    if request.method == "POST":
+        if "remove" in request.POST:
+            if existing:
+                existing.delete()
+                messages.success(request, "Your API key has been removed.")
+                log.info("user %s removed their credential", request.user.pk)
+            return redirect("jobs:credential")
+
+        form = ApiKeyForm(request.POST)
+        if form.is_valid():
+            api_key = form.cleaned_data["api_key"]
+            # Prove it works before storing it, so a typo is caught here
+            # rather than on their first submission.
+            try:
+                blablador.queue(api_key, registry.all_specs()[0].alias)
+            except blablador.InvalidCredential:
+                form.add_error("api_key", "Blablador rejected this key.")
+            except blablador.BlabladorError as exc:
+                form.add_error(
+                    None,
+                    f"Could not check the key against the service right now ({exc}). "
+                    "It has not been saved; please try again.",
+                )
+            else:
+                ApiCredential.store(request.user, api_key)
+                messages.success(request, "Your API key is stored and working.")
+                return redirect("jobs:credential")
+    else:
+        form = ApiKeyForm()
+
+    return render(
+        request,
+        "jobs/credential.html",
+        {"form": form, "credential": existing},
+    )
+
+
+def healthz(request):
+    """Liveness/readiness probe target.
+
+    Deliberately touches no database and renders no template, so it reports
+    whether this process is serving - not whether Postgres is reachable. A
+    database blip should not cause Kubernetes to kill every web pod.
+    """
+    from django.http import HttpResponse
+
+    return HttpResponse("ok", content_type="text/plain")

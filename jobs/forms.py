@@ -113,3 +113,20 @@ class ResidueSelectionField(forms.CharField):
                 "Use a chain and residue range, for example A1-76."
             )
         return value
+
+
+class ApiKeyForm(forms.Form):
+    api_key = forms.CharField(
+        label="Blablador API key",
+        widget=forms.PasswordInput(render_value=False, attrs={"autocomplete": "off"}),
+        help_text=(
+            "Your own key from the Blablador token page. It is encrypted before "
+            "being stored and is never shown back to you."
+        ),
+    )
+
+    def clean_api_key(self):
+        key = (self.cleaned_data["api_key"] or "").strip()
+        if len(key) < 16 or any(c.isspace() for c in key):
+            raise forms.ValidationError("That does not look like an API key.")
+        return key

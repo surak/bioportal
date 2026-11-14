@@ -14,6 +14,7 @@
     {% if user.is_authenticated %}
       <a href="{% url 'jobs:list' %}">My jobs</a>
       <a href="{% url 'jobs:queue' %}">Queue</a>
+      <a href="{% url 'jobs:credential' %}">API key</a>
       {% if user.is_staff %}<a href="{% url 'admin:index' %}">Admin</a>{% endif %}
       <span class="who">{{ user.get_full_name|default:user.username }}</span>
       <form method="post" action="{% url 'logout' %}" class="inline">

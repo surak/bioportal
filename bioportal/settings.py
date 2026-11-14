@@ -40,6 +40,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -78,8 +79,9 @@ DATABASES = {
         }
         if _env("DB_HOST")
         else {
+            # Development and container smoke tests only; production sets DB_HOST.
             "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
+            "NAME": _env("DB_SQLITE_PATH", str(BASE_DIR / "db.sqlite3")),
         }
     )
 }
@@ -101,6 +103,12 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"
+    },
+}
 STATICFILES_DIRS = [BASE_DIR / "static"]
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -137,7 +145,12 @@ LOGOUT_REDIRECT_URL = "jobs:index"
 # The key is held only by this backend. Direct-from-browser calls and CORS were
 # not validated in that deployment, so every request is proxied through here.
 BLABLADOR_API_BASE = _env("BLABLADOR_API_BASE", "https://api.blablador.fz-juelich.de/v1")
-BLABLADOR_API_KEY = _env("BLABLADOR_API_KEY", "")
+
+# There is no service-wide API key: each user stores their own, so GPU time is
+# metered to them. Stored keys are encrypted with this Fernet key, which lives
+# in the environment and never in the database.
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+CREDENTIAL_ENCRYPTION_KEY = _env("CREDENTIAL_ENCRYPTION_KEY", "")
 
 # Results are deleted upstream 48h after a job reaches a terminal state, so the
 # reconciler copies them here as soon as a job completes.

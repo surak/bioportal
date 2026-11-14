@@ -1,0 +1,228 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bioportal
+---
+# Postgres holds job records and users' encrypted API keys. It is the only
+# record of who owns which job, since the molecular service exposes no job list.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: bioportal-db
+  namespace: bioportal
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 10Gi
+---
+# Result archives. The molecular service deletes its copy 48h after a job
+# finishes, so this volume is what makes results durable. Size it for throughput.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: bioportal-artifacts
+  namespace: bioportal
+spec:
+  # RWX: the reconciler writes archives and every web replica serves them,
+  # so this volume is mounted by pods that may land on different nodes.
+  accessModes: [ReadWriteMany]
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 100Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bioportal-db
+  namespace: bioportal
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: {app: bioportal-db}
+  template:
+    metadata:
+      labels: {app: bioportal-db}
+    spec:
+      imagePullSecrets: [{name: regcred}]
+      securityContext:
+        fsGroup: 999
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - name: POSTGRES_DB
+              value: bioportal
+            - name: POSTGRES_USER
+              value: bioportal
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: bioportal-secrets, key: DB_PASSWORD}}
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports: [{containerPort: 5432}]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec: {command: [pg_isready, -U, bioportal]}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: "2", memory: 2Gi}
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: bioportal-db}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bioportal-db
+  namespace: bioportal
+spec:
+  selector: {app: bioportal-db}
+  ports: [{port: 5432, targetPort: 5432}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bioportal-web
+  namespace: bioportal
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: bioportal-web}
+  template:
+    metadata:
+      labels: {app: bioportal-web}
+    spec:
+      imagePullSecrets: [{name: regcred}]
+      securityContext:
+        fsGroup: 10001
+      initContainers:
+        # Migrations run once per rollout, before any web process serves.
+        - name: migrate
+          image: registry.jsc.fz-juelich.de/kaas/rke2-clusters/blablador/bioportal:0.1.2
+          command: [python, manage.py, migrate, --noinput]
+          envFrom:
+            - configMapRef: {name: bioportal-config}
+            - secretRef: {name: bioportal-secrets}
+      containers:
+        - name: web
+          image: registry.jsc.fz-juelich.de/kaas/rke2-clusters/blablador/bioportal:0.1.2
+          envFrom:
+            - configMapRef: {name: bioportal-config}
+            - secretRef: {name: bioportal-secrets}
+          ports: [{containerPort: 8000}]
+          volumeMounts:
+            - name: artifacts
+              mountPath: /data/artifacts
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+              # ALLOWED_HOSTS stays strict, so the probe must present the real
+              # host rather than the pod IP that kube-probe uses by default.
+              httpHeaders:
+                - {name: Host, value: bioportal.blablador.fz-juelich.de}
+                - {name: X-Forwarded-Proto, value: https}
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+              httpHeaders:
+                - {name: Host, value: bioportal.blablador.fz-juelich.de}
+                - {name: X-Forwarded-Proto, value: https}
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 5
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: "1", memory: 1Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities: {drop: [ALL]}
+      volumes:
+        - name: artifacts
+          persistentVolumeClaim: {claimName: bioportal-artifacts}
+---
+# Exactly one reconciler: it is the only thing that advances job state, and a
+# second copy would duplicate artifact downloads and completion emails.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bioportal-reconcile
+  namespace: bioportal
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: {app: bioportal-reconcile}
+  template:
+    metadata:
+      labels: {app: bioportal-reconcile}
+    spec:
+      imagePullSecrets: [{name: regcred}]
+      securityContext:
+        fsGroup: 10001
+      containers:
+        - name: reconcile
+          image: registry.jsc.fz-juelich.de/kaas/rke2-clusters/blablador/bioportal:0.1.2
+          command: [python, manage.py, reconcile, --loop]
+          envFrom:
+            - configMapRef: {name: bioportal-config}
+            - secretRef: {name: bioportal-secrets}
+          volumeMounts:
+            - name: artifacts
+              mountPath: /data/artifacts
+          resources:
+            requests: {cpu: 50m, memory: 256Mi}
+            limits: {cpu: "1", memory: 2Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+      volumes:
+        - name: artifacts
+          persistentVolumeClaim: {claimName: bioportal-artifacts}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bioportal-web
+  namespace: bioportal
+spec:
+  selector: {app: bioportal-web}
+  ports: [{port: 80, targetPort: 8000}]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bioportal
+  namespace: bioportal
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod-cluster
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [bioportal.blablador.fz-juelich.de]
+      secretName: bioportal-tls
+  rules:
+    - host: bioportal.blablador.fz-juelich.de
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: bioportal-web
+                port: {number: 80}

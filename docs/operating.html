@@ -30,7 +30,7 @@
 <table>
 <thead><tr><th>Setting</th><th>Why it matters</th></tr></thead>
 <tbody>
-<tr><td><code>BLABLADOR_API_KEY</code></td><td>Held only by the backend. The browser never talks to the service directly.</td></tr>
+<tr><td><code>CREDENTIAL_ENCRYPTION_KEY</code></td><td>Fernet key used to encrypt each user's stored Blablador key. Lives in the environment, never in the database, and must be identical for the web and reconciler processes. Rotating it makes every stored credential unreadable.</td></tr>
 <tr><td><code>ARTIFACT_ROOT</code></td><td>Where result archives are copied. This is what makes results outlive the service's 48-hour retention — size it for your throughput.</td></tr>
 <tr><td><code>MAX_ACTIVE_JOBS_PER_USER</code></td><td>Per-user fairness. The whole service accepts about 100 queued jobs and has a limited number of GPU slots, so set this deliberately before opening the portal up.</td></tr>
 <tr><td><code>STALE_RUNNING_SECONDS</code></td><td>How long a job may sit in <em>running</em> before it is flagged. Flagged jobs are never auto-failed: a lost worker cannot be distinguished from a slow job.</td></tr>

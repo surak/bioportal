@@ -14,6 +14,7 @@ import uuid
 from pathlib import Path
 from unittest import mock
 
+from cryptography.fernet import Fernet
 from django.contrib.auth.models import User
 from django.core import mail
 from django.test import TestCase, override_settings
@@ -21,7 +22,7 @@ from django.urls import reverse
 
 from jobs import blablador, notify
 from jobs.management.commands.reconcile import Command
-from jobs.models import ArtifactState, Job, JobEvent, Status
+from jobs.models import ApiCredential, ArtifactState, Job, JobEvent, Status
 from jobs.registry import all_specs, get as get_spec
 
 SEQ = "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG"
@@ -49,13 +50,24 @@ class Base(TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
         ov = override_settings(
+            # Production uses WhiteNoise's hashed manifest, which requires a
+            # collectstatic run; tests render templates without one.
+            STORAGES={
+                "default": {
+                    "BACKEND": "django.core.files.storage.FileSystemStorage"
+                },
+                "staticfiles": {
+                    "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+                },
+            },
             ARTIFACT_ROOT=self._tmp.name,
-            BLABLADOR_API_KEY="test-key",
             BLABLADOR_API_BASE="https://example.invalid/v1",
+            CREDENTIAL_ENCRYPTION_KEY=Fernet.generate_key().decode(),
         )
         ov.enable()
         self.addCleanup(ov.disable)
         self.user = User.objects.create_user("alice", "alice@fz-juelich.de", "pw")
+        ApiCredential.store(self.user, "alice-personal-key-0123456789")
         self.client.force_login(self.user)
 
     def make_job(self, **over):
@@ -88,7 +100,7 @@ class TransportTests(Base):
             return FakeResp(json.dumps({"molecular_job": remote_job()}).encode())
 
         with mock.patch("urllib.request.urlopen", fake_urlopen):
-            blablador.submit("alias-esmfold2", "uuid-1", {"sequence": SEQ})
+            blablador.submit("k", "alias-esmfold2", "uuid-1", {"sequence": SEQ})
 
         self.assertIs(captured["body"]["stream"], False)
         self.assertEqual(captured["body"]["model"], "alias-esmfold2")
@@ -97,7 +109,7 @@ class TransportTests(Base):
         action = json.loads(captured["body"]["input"])
         self.assertEqual(action["action"], "submit")
         self.assertEqual(action["request_id"], "uuid-1")
-        self.assertEqual(captured["auth"], "Bearer test-key")
+        self.assertEqual(captured["auth"], "Bearer k")
 
     def test_falls_back_to_compatibility_copy_in_output(self):
         envelope = {
@@ -108,14 +120,14 @@ class TransportTests(Base):
                 op.return_value.__enter__.return_value.read.return_value = json.dumps(
                     envelope
                 ).encode()
-                job = blablador.status("alias-esmfold2", JOB_ID)
+                job = blablador.status("k", "alias-esmfold2", JOB_ID)
         self.assertEqual(job["status"], "running")
 
     def test_html_gateway_error_is_transient_not_a_job_failure(self):
         with mock.patch("urllib.request.urlopen") as op:
             op.return_value.__enter__.return_value.read.return_value = b"<html>502</html>"
             with self.assertRaises(blablador.BlabladorError) as ctx:
-                blablador.status("alias-esmfold2", JOB_ID)
+                blablador.status("k", "alias-esmfold2", JOB_ID)
         self.assertTrue(ctx.exception.transient)
 
     def test_status_codes_map_to_typed_errors(self):
@@ -133,7 +145,7 @@ class TransportTests(Base):
                 ),
             ):
                 with self.assertRaises(exc_type):
-                    blablador.status("alias-esmfold2", JOB_ID)
+                    blablador.status("k", "alias-esmfold2", JOB_ID)
 
 
 # --- artifacts ------------------------------------------------------------
@@ -151,13 +163,13 @@ class ArtifactTests(Base):
         ]
         seen_offsets = []
 
-        def fake_post(model, action):
+        def fake_post(api_key, model, action):
             seen_offsets.append(action["offset"])
             return chunks[len(seen_offsets) - 1]
 
         dest = Path(self._tmp.name) / "r.zip"
         with mock.patch("jobs.blablador._post", fake_post):
-            size = blablador.fetch_artifact("alias-esmfold2", JOB_ID, dest)
+            size = blablador.fetch_artifact("k", "alias-esmfold2", JOB_ID, dest)
 
         self.assertEqual(size, len(payload))
         self.assertEqual(dest.read_bytes(), payload)
@@ -165,25 +177,25 @@ class ArtifactTests(Base):
         self.assertEqual(seen_offsets, [0, half])
 
     def test_partial_download_leaves_no_usable_file(self):
-        def fake_post(model, action):
+        def fake_post(api_key, model, action):
             raise blablador.BlabladorError("boom", transient=False)
 
         dest = Path(self._tmp.name) / "r.zip"
         with mock.patch("jobs.blablador._post", fake_post):
             with self.assertRaises(blablador.BlabladorError):
-                blablador.fetch_artifact("alias-esmfold2", JOB_ID, dest)
+                blablador.fetch_artifact("k", "alias-esmfold2", JOB_ID, dest)
         self.assertFalse(dest.exists())
         self.assertFalse(dest.with_suffix(".zip.part").exists())
 
     @override_settings(MAX_ARTIFACT_BYTES=1000)
     def test_oversized_artifact_is_refused(self):
-        def fake_post(model, action):
+        def fake_post(api_key, model, action):
             return {"total_bytes": 5000, "data_base64": base64.b64encode(b"x").decode()}
 
         with mock.patch("jobs.blablador._post", fake_post):
             with self.assertRaises(blablador.BlabladorError):
                 blablador.fetch_artifact(
-                    "alias-esmfold2", JOB_ID, Path(self._tmp.name) / "r.zip"
+                    "k", "alias-esmfold2", JOB_ID, Path(self._tmp.name) / "r.zip"
                 )
 
 
@@ -237,7 +249,7 @@ class SubmitTests(Base):
         )
         calls = []
 
-        def fake_post(model, action):
+        def fake_post(api_key, model, action):
             calls.append(action)
             return remote_job()
 
@@ -461,11 +473,13 @@ class CancelTests(Base):
 class AccessTests(Base):
     def test_cannot_see_another_users_job(self):
         bob = User.objects.create_user("bob", "bob@x.de", "pw")
+        ApiCredential.store(bob, "bob-personal-key-0123456789")
         job = self.make_job(owner=bob)
         self.assertEqual(self.client.get(job.get_absolute_url()).status_code, 404)
 
     def test_cannot_download_another_users_result(self):
         bob = User.objects.create_user("bob", "bob@x.de", "pw")
+        ApiCredential.store(bob, "bob-personal-key-0123456789")
         job = self.make_job(owner=bob, status=Status.COMPLETED,
                             artifact_state=ArtifactState.STORED,
                             artifact_path="/etc/passwd")
@@ -527,3 +541,83 @@ class PageTests(Base):
         body = self.client.get(reverse("jobs:status", args=[job.pk])).content.decode()
         self.assertIn("position 7", body)
         self.assertNotRegex(body, r"(?i)(starts|begins|ready) in")
+
+
+class CredentialTests(Base):
+    """Each user's own key: stored encrypted, used for their jobs only."""
+
+    def test_key_is_encrypted_at_rest_and_never_stored_plaintext(self):
+        cred = ApiCredential.objects.get(user=self.user)
+        self.assertNotIn("alice-personal-key", cred.encrypted_key)
+        self.assertEqual(cred.reveal(), "alice-personal-key-0123456789")
+
+    def test_fingerprint_is_not_reversible_and_distinguishes_keys(self):
+        from jobs import credentials
+
+        a = credentials.fingerprint("alice-personal-key-0123456789")
+        b = credentials.fingerprint("another-key-9876543210")
+        self.assertNotEqual(a, b)
+        self.assertNotIn("alice", a)
+
+    def test_each_job_uses_its_own_owner_key(self):
+        bob = User.objects.create_user("bob", "bob@x.de", "pw")
+        ApiCredential.store(bob, "bob-personal-key-0123456789")
+        self.make_job(owner=bob)
+        seen = []
+
+        def fake_post(api_key, model, action):
+            seen.append(api_key)
+            return remote_job(status="running")
+
+        with mock.patch("jobs.blablador._post", fake_post):
+            Command().poll_active()
+
+        self.assertEqual(seen, ["bob-personal-key-0123456789"])
+
+    def test_submitting_without_a_key_is_blocked_before_any_call(self):
+        ApiCredential.objects.filter(user=self.user).delete()
+        with mock.patch("jobs.blablador._post") as post:
+            resp = self.client.post(
+                reverse("jobs:submit", args=["esmfold2"]),
+                {"sequence": SEQ, "num_loops": 3, "steps": 50},
+            )
+        post.assert_not_called()
+        self.assertEqual(Job.objects.count(), 0)
+        self.assertContains(resp, "need a Blablador API key")
+
+    def test_rejected_key_is_flagged_and_job_is_left_running(self):
+        job = self.make_job(status=Status.RUNNING)
+        with mock.patch(
+            "jobs.blablador._post",
+            side_effect=blablador.InvalidCredential("nope", status=401),
+        ):
+            Command().poll_active()
+        job.refresh_from_db()
+        cred = ApiCredential.objects.get(user=self.user)
+        self.assertTrue(cred.is_rejected)
+        # The computation is untouched; we simply cannot watch it.
+        self.assertEqual(job.status, Status.RUNNING)
+
+    def test_key_is_verified_before_being_stored(self):
+        ApiCredential.objects.filter(user=self.user).delete()
+        with mock.patch(
+            "jobs.blablador._post",
+            side_effect=blablador.InvalidCredential("nope", status=401),
+        ):
+            resp = self.client.post(
+                reverse("jobs:credential"), {"api_key": "a-bad-key-0123456789"}
+            )
+        self.assertFalse(ApiCredential.objects.filter(user=self.user).exists())
+        self.assertContains(resp, "rejected this key")
+
+    def test_stored_key_is_never_rendered_back(self):
+        resp = self.client.get(reverse("jobs:credential"))
+        self.assertNotContains(resp, "alice-personal-key-0123456789")
+        self.assertContains(resp, ApiCredential.objects.get(user=self.user).fingerprint)
+
+    def test_removing_a_key_does_not_touch_jobs(self):
+        job = self.make_job(status=Status.RUNNING)
+        self.client.post(reverse("jobs:credential"), {"remove": "1"})
+        self.assertFalse(ApiCredential.objects.filter(user=self.user).exists())
+        job.refresh_from_db()
+        self.assertEqual(job.status, Status.RUNNING)
