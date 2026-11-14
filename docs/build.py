@@ -172,6 +172,31 @@ def index_page(specs) -> str:
 
 <div class="cards">{cards}</div>
 
+<h2>What it looks like</h2>
+<figure>
+  <img src="img/job-detail.png" alt="A finished job showing a predicted structure and its download link">
+  <figcaption>A finished ESMFold2 job: the predicted structure, rendered in the
+  browser, with the result archive stored and ready to download.</figcaption>
+</figure>
+<div class="shots">
+  <figure>
+    <img src="img/home.png" alt="The home page listing the five models">
+    <figcaption>Choosing a model.</figcaption>
+  </figure>
+  <figure>
+    <img src="img/job-list.png" alt="The job list with finished jobs">
+    <figcaption>Your jobs, which outlive the browser session.</figcaption>
+  </figure>
+  <figure>
+    <img src="img/submit-esmfold2.png" alt="The ESMFold2 submission form">
+    <figcaption>Every input is validated before anything is submitted.</figcaption>
+  </figure>
+  <figure>
+    <img src="img/api-key.png" alt="The API key page">
+    <figcaption>Your own key, verified before it is stored.</figcaption>
+  </figure>
+</div>
+
 <h2>How a job works</h2>
 <ol class="steps">
   <li><strong>Submit once.</strong> Your request goes into a queue shared with

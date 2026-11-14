@@ -58,3 +58,10 @@ footer { border-top:1px solid var(--line); color:var(--muted); font-size:.82rem;
   padding:1.25rem 1rem; text-align:center; }
 
 @media (max-width:40rem) { main { padding:1.5rem 1rem 3rem; } }
+
+figure { margin: 1.25rem 0; }
+figure img { width: 100%; height: auto; display: block;
+  border: 1px solid var(--line); border-radius: 10px; }
+figcaption { color: var(--muted); font-size: .85rem; margin-top: .45rem; }
+.shots { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); }
+.shots figure { margin: 0; }

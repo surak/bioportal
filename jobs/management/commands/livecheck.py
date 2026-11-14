@@ -177,7 +177,9 @@ def _ubiquitin_pdb() -> str:
 
 # Smallest inputs that still exercise each real code path.
 SMOKE_PARAMS = {
-    "esmfold2": lambda: {"sequence": UBIQUITIN, "num_loops": 1, "steps": 10},
+    # The documented example. Fewer loops/steps finishes quickly but
+    # returns a structure that is not physically plausible.
+    "esmfold2": lambda: {"sequence": UBIQUITIN, "num_loops": 3, "steps": 50},
     "bioemu2": lambda: {
         "sequence": UBIQUITIN, "samples": 1, "seed": 42, "msa_mode": "single_sequence",
     },

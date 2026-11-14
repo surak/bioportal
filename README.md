@@ -6,6 +6,28 @@ BindCraft, RFdiffusion3, ESMFold2 and BioEmu2.
 One Django app, one page per model. Users sign in with their JSC account,
 submit a job, close the tab, and come back — or get an email — when it's done.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/job-detail-dark.png">
+  <img src="docs/img/job-detail.png" alt="A finished ESMFold2 job showing the predicted ubiquitin structure and a download link">
+</picture>
+
+<table>
+<tr>
+<td width="50%">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/home-dark.png">
+  <img src="docs/img/home.png" alt="The portal home page listing the five models">
+</picture>
+</td>
+<td width="50%">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/job-list-dark.png">
+  <img src="docs/img/job-list.png" alt="The job list showing finished jobs and their result archives">
+</picture>
+</td>
+</tr>
+</table>
+
 ## How it fits together
 
 ```

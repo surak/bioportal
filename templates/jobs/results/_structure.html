@@ -22,7 +22,16 @@
         var ext = name.toLowerCase().endsWith("cif") ? "cif" : "pdb";
         var blob = new Blob([text], {type: "text/plain"});
         return stage.loadFile(blob, {ext: ext}).then(function (c) {
-          c.addRepresentation("cartoon", {colorScheme: "bfactor"});
+          // Predicted structures often carry no HELIX/SHEET records, and the
+          // cartoon representation then draws nothing at all. Fall back to a
+          // backbone trace rather than showing an empty viewer.
+          var rep = c.addRepresentation("cartoon", {colorScheme: "bfactor"});
+          if (!rep.repr.bufferList.length) {
+            c.removeRepresentation(rep);
+            c.addRepresentation("backbone", {colorScheme: "bfactor"});
+          }
+          // Ligands and ions are never part of a cartoon or backbone trace.
+          c.addRepresentation("ball+stick", {sele: "hetero and not water"});
           c.autoView();
           window.addEventListener("resize", function () { stage.handleResize(); });
         });

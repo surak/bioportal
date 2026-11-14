@@ -28,7 +28,7 @@ SHOTS = [
     ("/", "home", None, True),
     ("/models/esmfold2/", "submit-esmfold2", "form.jobform", True),
     ("/jobs/", "job-list", "table.jobs", False),
-    ("/jobs/1/", "job-detail", "#viewer canvas", False),
+    ("/jobs/6/", "job-detail", "#viewer canvas", False),
     ("/queue/", "queue", "table.jobs", False),
     ("/account/key/", "api-key", "form.jobform", False),
 ]
