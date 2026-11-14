@@ -16,8 +16,7 @@ submit a job, close the tab, and come back — or get an email — when it's don
   <img src="docs/img/job-detail.png" alt="A finished ESMFold2 job showing a predicted structure and a download link">
 </picture>
 
-Structures produced through the portal against the live service, rendered by
-its in-browser viewer:
+Real output from the five models, run through the portal:
 
 <table>
 <tr>
@@ -332,11 +331,24 @@ that no invented progress or ETA appears in the UI.
 
 ## Not done
 
-- **Not run against the live service.** Every test stubs the network; the shim's
-  real responses may differ in detail from the handoff.
-- **No billing integration.** Native `gpu_seconds` is displayed as reported;
-  there's no currency conversion, because no rate was established.
-- **Result previews** are a client-side NGL render of the first structure found
-  in the archive. BioEmu2 trajectories and design sets show file listings only.
+- **Nothing is approved for publication yet.** `/privacy/` and `/terms/` render
+  as drafts until `PRIVACY_APPROVED` and `TERMS_APPROVED` are set, which should
+  happen only after the data protection officer and the institute have reviewed
+  the text — not merely once the contact fields are filled in.
+- **No OIDC client is registered**, so federated sign-in does not work yet, and
+  `OIDC_ALLOWED_ENTITLEMENTS` is empty, which would accept any successful
+  Helmholtz AAI login.
+- **No billing integration.** Native `gpu_seconds` is shown as reported; there
+  is no currency conversion, because no rate was established.
 - **`GET /v1/models` is not consulted at runtime**; aliases are hardcoded in the
-  specs. Worth wiring up a readiness check if aliases start moving.
+  specs. `manage.py livecheck --discover` checks them on demand. Worth wiring
+  into a readiness check if aliases start moving.
+- **BioEmu2 previews show the topology, not the ensemble.** The sampled
+  conformations are a trajectory in the archive, which needs a desktop viewer.
+- **Artifact storage is never pruned.** `ARTIFACT_ROOT` grows without limit;
+  there is no retention job.
+- **Unvalidated model paths are not exposed**: BioEmu2's multi-GPU route and
+  advanced RFdiffusion3 inputs were not covered by deployment validation, so
+  the forms do not offer them.
+- **The structure check is a plausibility check, not validation.** It measures
+  backbone bond lengths only. A structure can pass it and still be wrong.

@@ -361,7 +361,7 @@ def privacy(request):
             "dpo_contact": dpo or "not configured",
             "admin_contact": admin or "not configured",
             "api_base": settings.BLABLADOR_API_BASE,
-            "incomplete": not (controller and dpo and admin),
+            "incomplete": not (settings.PRIVACY_APPROVED and controller and dpo and admin),
             "updated": settings.PRIVACY_UPDATED,
         },
     )

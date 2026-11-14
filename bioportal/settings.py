@@ -190,6 +190,10 @@ PRIVACY_DPO_CONTACT = _env("PRIVACY_DPO_CONTACT", "")
 PRIVACY_ADMIN_CONTACT = _env("PRIVACY_ADMIN_CONTACT", "")
 PRIVACY_UPDATED = _env("PRIVACY_UPDATED", "2026-11-14")
 SECURITY_CONTACT = _env("SECURITY_CONTACT", "")
+# Having the contacts filled in is not the same as the statement having been
+# reviewed. This flag is what clears the "not yet complete" banner, so the
+# page never implies a review that has not happened.
+PRIVACY_APPROVED = _bool("PRIVACY_APPROVED", False)
 # Set once the institute has reviewed and adopted the rules of use shown at
 # /terms/; until then the page says plainly that they are a draft.
 TERMS_APPROVED = _bool("TERMS_APPROVED", False)

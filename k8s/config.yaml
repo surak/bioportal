@@ -23,6 +23,19 @@ data:
   MAX_ACTIVE_JOBS_PER_USER: "5"
   STALE_RUNNING_SECONDS: "108000"
 
+  # Shown on /privacy/ and /terms/. The pages flag themselves as incomplete
+  # until the controller, DPO and admin contact are all set.
+  PRIVACY_CONTROLLER: "Forschungszentrum Jülich GmbH"
+  PRIVACY_ADMIN_CONTACT: "a.strube@fz-juelich.de"
+  SECURITY_CONTACT: "cert@fz-juelich.de"
+  # Role address published in Forschungszentrum Jülich's own data protection
+  # notices. Confirm it is current before the statement is approved.
+  PRIVACY_DPO_CONTACT: "DSB@fz-juelich.de"
+  # Set to "1" only once the DPO has reviewed the statement text.
+  PRIVACY_APPROVED: "0"
+  # Set to "1" once the rules of use at /terms/ have been adopted.
+  TERMS_APPROVED: "0"
+
   OIDC_ISSUER: "https://login.helmholtz.de/oauth2"
   # Empty accepts any successful Helmholtz AAI login. Set before announcing.
   OIDC_ALLOWED_ENTITLEMENTS: ""

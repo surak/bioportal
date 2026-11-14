@@ -15,8 +15,7 @@
     <span class="meta">{{ job.artifact_bytes|filesizeformat }}</span>
   </p>
   <p class="hint">
-    Stored on our side, so it stays available after the service's own 48-hour
-    window closes.{% if spec.result_note %} {{ spec.result_note }}{% endif %}
+    Stored here, so it outlives the service's own 48-hour window.{% if spec.result_note %} {{ spec.result_note }}{% endif %}
     The archive may hold several files — don't assume a single PDB.
   </p>
   {% if job.structure_check.residues %}
