@@ -124,11 +124,17 @@ OIDC_RP_CLIENT_ID = _env("OIDC_CLIENT_ID")
 OIDC_RP_CLIENT_SECRET = _env("OIDC_CLIENT_SECRET")
 OIDC_RP_SIGN_ALGO = "RS256"
 
+# Taken from the provider's discovery document, not derived from the issuer:
+# two of these do not follow the pattern you would guess. Verify with
+# `manage.py checkoidc` if the provider ever moves them.
 _OIDC_ISSUER = _env("OIDC_ISSUER", "https://login.helmholtz.de/oauth2")
-OIDC_OP_AUTHORIZATION_ENDPOINT = _env("OIDC_AUTH_ENDPOINT", f"{_OIDC_ISSUER}/authorize")
+_OIDC_HOST = _OIDC_ISSUER.rsplit("/", 1)[0]
+OIDC_OP_AUTHORIZATION_ENDPOINT = _env(
+    "OIDC_AUTH_ENDPOINT", f"{_OIDC_HOST}/oauth2-as/oauth2-authz"
+)
 OIDC_OP_TOKEN_ENDPOINT = _env("OIDC_TOKEN_ENDPOINT", f"{_OIDC_ISSUER}/token")
 OIDC_OP_USER_ENDPOINT = _env("OIDC_USER_ENDPOINT", f"{_OIDC_ISSUER}/userinfo")
-OIDC_OP_JWKS_ENDPOINT = _env("OIDC_JWKS_ENDPOINT", f"{_OIDC_ISSUER}/jwks")
+OIDC_OP_JWKS_ENDPOINT = _env("OIDC_JWKS_ENDPOINT", f"{_OIDC_ISSUER}/jwk")
 OIDC_RP_SCOPES = _env("OIDC_SCOPES", "openid email profile eduperson_entitlement")
 
 # Only members of these entitlements/groups may log in. Empty = allow any

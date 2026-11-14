@@ -248,6 +248,33 @@ make Kubernetes kill every web pod. They pass an explicit `Host` header because
 
 ## Authentication
 
+Register the client through Helmholtz AAI's self-service at
+<https://login.helmholtz.de/oauthhome> (a dev instance for testing lives at
+login-dev.helmholtz.de). AAI administrators review each request and the client
+does not work until accepted, so allow time. Registration also requires a
+Service Security Contact, who must be reachable during a security incident and
+registered at the Infrastructure Security Point, plus a privacy policy and
+acceptance of the AAI Top Level Policy and SIRTFI.
+
+Values for this deployment:
+
+| Field | Value |
+|---|---|
+| Redirect URI | `https://bioportal.blablador.fz-juelich.de/oidc/callback/` |
+| Logout redirect | `https://bioportal.blablador.fz-juelich.de/oidc/logout/` |
+| Flow | authorization code (confidential client) |
+| Scopes | `openid email profile eduperson_entitlement` |
+| ID token algorithm | RS256 |
+
+The username and password the self-service issues are the client ID and
+secret; put them in the `bioportal-secrets` Secret as `OIDC_CLIENT_ID` and
+`OIDC_CLIENT_SECRET`.
+
+`manage.py checkoidc` compares the configured endpoints against the provider's
+discovery document and prints the redirect URIs to register. Worth running:
+the endpoints cannot be guessed from the issuer URL — authorization lives
+under `/oauth2-as/oauth2-authz` and the JWKS at `/jwk`, not `/jwks`.
+
 - **Users** — `/oidc/authenticate/`, Helmholtz AAI. `OIDC_ALLOWED_ENTITLEMENTS`
   restricts access to your group; empty accepts any successful login, which is
   fine for a pilot but should be tightened before announcing the service.
