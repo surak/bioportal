@@ -21,7 +21,17 @@ log = logging.getLogger(__name__)
 
 
 def index(request):
-    return render(request, "jobs/index.html", {"specs": registry.all_specs()})
+    # The handover page is for the operators; see views.handover for when it is
+    # linked from here.
+    show_handover = bool(
+        request.user.is_staff
+        or (settings.OIDC_RP_CLIENT_ID and settings.OIDC_ALLOWED_ENTITLEMENTS)
+    )
+    return render(
+        request,
+        "jobs/index.html",
+        {"specs": registry.all_specs(), "show_handover": show_handover},
+    )
 
 
 def _spec_or_404(slug):
@@ -340,6 +350,22 @@ def healthz(request):
     from django.http import HttpResponse
 
     return HttpResponse("ok", content_type="text/plain")
+
+
+def handover(request):
+    """Notes for the group that operates the service, not for its users.
+
+    Linked from the home page only once the authorisation half of the handover
+    is real: a registered AAI client restricted to a known entitlement set.
+    Until then the page is honest about what is blocked, and putting it in
+    front of the first users would undercut the rest of the portal.
+    """
+    authorised = bool(
+        settings.OIDC_RP_CLIENT_ID and settings.OIDC_ALLOWED_ENTITLEMENTS
+    )
+    if not (authorised or request.user.is_staff):
+        raise Http404("no such page")
+    return render(request, "jobs/handover.html")
 
 
 def privacy(request):

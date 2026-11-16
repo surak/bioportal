@@ -16,6 +16,7 @@ urlpatterns = [
     path("queue/", views.queue_status, name="queue"),
     path("privacy/", views.privacy, name="privacy"),
     path("terms/", views.terms, name="terms"),
+    path("handover/", views.handover, name="handover"),
     path("account/key/", views.credential, name="credential"),
     path("models/<slug:slug>/", views.submit, name="submit"),
 ]

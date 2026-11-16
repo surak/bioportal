@@ -44,6 +44,24 @@ th, td { text-align:left; padding:.5rem .6rem; border-bottom:1px solid var(--lin
 th { color:var(--muted); font-size:.78rem; text-transform:uppercase;
   letter-spacing:.04em; font-weight:600; white-space:nowrap; }
 
+/* The handover table is wide; its wrapper scrolls rather than the page or the
+   table itself. Below 40rem three columns of prose do not fit, so the row
+   becomes a block and each cell is labelled from its own data-label. */
+.table-scroll { overflow-x:auto; }
+.table-scroll table { display:table; min-width:34rem; }
+@media (max-width:40rem) {
+  .table-scroll table, .table-scroll thead, .table-scroll tbody,
+  .table-scroll tr, .table-scroll th, .table-scroll td { display:block; }
+  .table-scroll table { min-width:0; }
+  .table-scroll thead { display:none; }
+  .table-scroll tr { border-bottom:1px solid var(--line); padding:.75rem 0; }
+  .table-scroll td { border:0; padding:.15rem 0; }
+  .table-scroll td::before { content:attr(data-label); display:block;
+    color:var(--muted); font-size:.72rem; text-transform:uppercase;
+    letter-spacing:.04em; margin-top:.4rem; }
+  .table-scroll td:first-child::before { content:none; }
+  .table-scroll td:first-child { font-weight:600; }
+}
 .callout { background:var(--card); border:1px solid var(--line);
   border-left:3px solid var(--accent); border-radius:8px; padding:.9rem 1.1rem;
   margin:1.25rem 0; }

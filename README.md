@@ -179,6 +179,20 @@ call `register(ModelSpec(...))` with the alias from `GET /v1/models`, and add th
 module to `load_specs()`. It appears on the homepage with its own page, queue
 entry and result view.
 
+## For whoever inherits this
+
+`templates/jobs/handover.html` is the operator's page, "For the SimLab": the two
+roles, what is blocked on people rather than code, the day-one order of
+operations, an on-call table of symptoms, and the design decisions not to undo by
+accident. The portal serves it at `/handover/` to staff, and links it from the
+home page once an AAI client and an entitlement list are configured — that is,
+roughly, the moment the deployment stops being a pilot.
+
+It is written once, in that template, and `docs/build.py` wraps the same text in
+the documentation site's chrome to produce `docs/handover.html`. Edit the
+template and rerun the generator; a test fails if the generated page is stale,
+another if a class in the template is styled in only one of the two stylesheets.
+
 ## Running it
 
 ```bash

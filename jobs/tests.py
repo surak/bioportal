@@ -9,6 +9,9 @@ from __future__ import annotations
 import base64
 import io
 import json
+import re
+import subprocess
+import sys
 import tempfile
 import uuid
 from pathlib import Path
@@ -882,3 +885,99 @@ class SirtfiTests(Base):
         resp = self.client.get(reverse("jobs:terms"))
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Acceptable use")
+
+
+class HandoverTests(Base):
+    """The operator's page: who may see it, and that its copies cannot drift."""
+
+    def as_staff(self):
+        self.user.is_staff = True
+        self.user.save()
+        return self.client
+
+    def test_the_docs_site_is_not_stale(self):
+        """A form, a caveat or the handover template cannot change alone."""
+        root = Path(__file__).resolve().parent.parent
+        proc = subprocess.run(
+            [sys.executable, str(root / "docs" / "build.py"), "--check"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+    def test_it_is_hidden_while_the_service_is_unauthorised(self):
+        """Not a security boundary - a page about open blockers is not shown
+        to users who were just told the service works."""
+        with override_settings(OIDC_RP_CLIENT_ID="", OIDC_ALLOWED_ENTITLEMENTS=[]):
+            self.assertEqual(
+                self.client.get(reverse("jobs:handover")).status_code, 404
+            )
+            self.assertNotContains(
+                self.client.get(reverse("jobs:index")), "Notes for the SimLab"
+            )
+
+    def test_it_appears_once_an_aai_client_is_restricted(self):
+        with override_settings(
+            OIDC_RP_CLIENT_ID="bioportal",
+            OIDC_ALLOWED_ENTITLEMENTS=["https://login.helmholtz.de/.../group#member"],
+        ):
+            self.assertContains(self.client.get(reverse("jobs:handover")), "For the SimLab")
+            self.assertContains(
+                self.client.get(reverse("jobs:index")), "Notes for the SimLab"
+            )
+
+    def test_one_unrestricted_client_does_not_publish_it(self):
+        """A client with no entitlement list accepts any AAI login, so the
+        service is not authorised yet and the page stays out of the way."""
+        with override_settings(
+            OIDC_RP_CLIENT_ID="bioportal", OIDC_ALLOWED_ENTITLEMENTS=[]
+        ):
+            self.assertEqual(
+                self.client.get(reverse("jobs:handover")).status_code, 404
+            )
+
+    def test_staff_can_always_read_it(self):
+        self.as_staff()
+        with override_settings(OIDC_RP_CLIENT_ID="", OIDC_ALLOWED_ENTITLEMENTS=[]):
+            self.assertEqual(
+                self.client.get(reverse("jobs:handover")).status_code, 200
+            )
+
+    def test_it_names_the_blockers_and_the_decisions_not_to_undo(self):
+        self.as_staff()
+        body = self.client.get(reverse("jobs:handover")).content.decode()
+        # Blocked on people, not on code.
+        self.assertIn("OIDC_ALLOWED_ENTITLEMENTS", body)
+        self.assertIn("PRIVACY_APPROVED", body)
+        self.assertIn("TERMS_APPROVED", body)
+        # And the traps a new operator would otherwise undo by accident.
+        self.assertIn("No progress bar", body)
+        self.assertIn("never logged", " ".join(body.split()))
+
+    def test_both_stylesheets_style_the_shared_markup(self):
+        """The page is written once but styled twice: the portal's app.css and
+        the docs site's docs.css. A class defined in only one of them renders
+        as an unstyled box on the other site - which is how the callout and the
+        wide table shipped broken the first time."""
+        root = Path(__file__).resolve().parent.parent
+        templ = (root / "templates" / "jobs" / "handover.html").read_text()
+        used = {c for group in re.findall(r'class="([^"]+)"', templ)
+                for c in group.split()}
+        app = (root / "static" / "app.css").read_text()
+        docs = (root / "docs" / "docs.css").read_text()
+        # The portal styles the table through a class; the docs site styles a
+        # bare <table> instead, which is why .jobs may live in one sheet only.
+        for name in sorted(used - {"jobs"}):
+            self.assertIn("." + name, app, f"static/app.css does not style .{name}")
+            self.assertIn("." + name, docs, f"docs/docs.css does not style .{name}")
+        self.assertIn("table.jobs", app)
+        self.assertIn("table {", docs)
+
+    def test_it_matches_the_docs_site_copy(self):
+        """docs/handover.html wraps the template; never a second version."""
+        root = Path(__file__).resolve().parent.parent
+        templ = (root / "templates" / "jobs" / "handover.html").read_text()
+        body = templ[templ.index("<h1>"): templ.rindex("{% endblock %}")]
+        page = (root / "docs" / "handover.html").read_text()
+        self.assertIn(body.strip(), page)

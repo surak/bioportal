@@ -19,4 +19,13 @@
     </article>
   {% endfor %}
 </div>
+
+{% if show_handover %}
+  <p class="hint">
+    Running this service rather than using it?
+    <a href="{% url 'jobs:handover' %}">Notes for the SimLab</a> — what the
+    deployment owns, what is still blocked, and what happens when a job gets
+    stuck.
+  </p>
+{% endif %}
 {% endblock %}

@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>For the SimLab · BioPortal</title>
+<link rel="icon" type="image/svg+xml" href="img/bioportal-square.svg">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body>
+<header class="masthead">
+  <a class="brand" href="index.html">
+    <img src="img/bioportal-logo.svg" alt="BioPortal — molecular models on Blablador">
+  </a>
+</header>
+<nav class='sitenav'><a href="index.html">Overview</a><a href="bindcraft.html">BindCraft</a><a href="bioemu2.html">BioEmu2</a><a href="esmfold2.html">ESMFold2</a><a href="proteina-complexa.html">Proteina-Complexa</a><a href="rfdiffusion3.html">RFdiffusion3</a><a href="operating.html">Running the portal</a><a href="handover.html" class='on'>For the SimLab</a></nav>
+<main>
+<h1>For the SimLab</h1>
+<p class="lede">
+  What the Simulation and Data Lab Biology owns, inherits, and has to settle
+  before BioPortal stops being a pilot.
+</p>
+
+<div class="callout">
+  <p>
+    <strong>Three things are blocked on people, not on code.</strong> No
+    Helmholtz AAI client is registered, so nobody can sign in with a JSC
+    account yet. <code>OIDC_ALLOWED_ENTITLEMENTS</code> is empty, which would
+    accept <em>any</em> successful AAI login, including accounts outside the
+    group this service is for. And DNS for
+    <code>bioportal.blablador.fz-juelich.de</code> does not resolve, so no
+    certificate can be issued and the ingress answers nothing. The first is an
+    AAI review queue, the second is one environment variable, the third is one
+    A record to <code>134.94.198.59</code>.
+  </p>
+</div>
+
+<h2>Where this sits</h2>
+<p>
+  The <a
+  href="https://www.fz-juelich.de/en/jsc/about-us/structure/simulation-and-data-labs/sdl-biology">SimLab
+  Biology</a> exists to put HPC-bioscience work in front of Jülich's
+  supercomputers and to support the groups that need it. BioPortal is the
+  opposite end of that interface: the same models that normally require a
+  submission script, an allocation and a GPU-scheduling conversation with a
+  knowledgeable person, reachable by a biologist on a laptop who wants a
+  structure and knows exactly nothing about SLURM.
+</p>
+<p>
+  That framing is what the service should be judged on, and it is also its
+  limit. The portal is a convenience layer over one shared GPU queue. It is not
+  an allocation of dedicated GPU time, it does not make a large design run
+  affordable, and it does not replace support. Users who need to run 10,000
+  designs, or who need a parameter combination the portal does not offer, still
+  need the SimLab — and the portal should send them there rather than quietly
+  failing at them.
+</p>
+
+<h2>The two roles</h2>
+<p>
+  Running BioPortal is two jobs that share a database and little else. One is
+  <strong>operations</strong>: keep the pods up, the reconciler running, the
+  certificate renewed, the patches applied, the artifact volume from silently
+  filling, and answer the user who writes in with a job ID. The other is
+  <strong>science support</strong>: decide which models are offered and which
+  input paths are exposed, read the results well enough to say whether a
+  surprising output is the model or the user, and take the decision to add the
+  sixth model. Neither is a full-time role at the current volume, and the same
+  person can hold both, but the second one cannot be delegated to whoever is on
+  call — it is the part that needs the group's judgment.
+</p>
+<p>
+  Concretely, before anyone is announced as a user, and already noted in the
+  internal open-items list:
+</p>
+<ul>
+  <li>a named <strong>service security contact</strong>, reachable during an
+      incident, which Helmholtz AAI registration requires and Sirtfi assumes.
+      <code>SECURITY_CONTACT</code> currently holds the institute's CERT
+      address: a working mailbox, not a person who knows this service;</li>
+  <li>the <strong>privacy statement</strong> reviewed by the data protection
+      officer. The listed DPO address was taken from published FZJ notices and
+      has not been confirmed internally. <code>PRIVACY_APPROVED</code> stays 0
+      until that review happens, however complete the contact fields look;</li>
+  <li>the <strong>rules of use</strong> adopted by the institute, which is what
+      <code>TERMS_APPROVED</code> claims. A page that marks itself a draft is
+      honest; flipping that flag without the adoption makes it false;</li>
+  <li><strong>who answers mail</strong>. Completion notifications go out under
+      the portal's own address, and users will reply to them;</li>
+  <li>a decision on <strong>billing</strong>. The portal reports native
+      <code>gpu_seconds</code> and no currency, because no rate was ever
+      established. That is the right default, and it needs to be a decision
+      rather than a leftover;</li>
+  <li><strong>caps set on purpose</strong>. Five jobs per user against a global
+      queue of about a hundred is a placeholder, not a policy. Both numbers
+      shape who the service is usable by — a teaching session and a single
+      postdoc want different answers.</li>
+</ul>
+
+<h2>Day one, in order</h2>
+<ol class="steps">
+  <li><strong>Point DNS at the ingress</strong> — an A record for
+      <code>bioportal.blablador.fz-juelich.de</code> to
+      <code>134.94.198.59</code>. Nothing else can be checked over TLS until
+      this is done, and cert-manager issues the certificate only once the name
+      resolves.</li>
+  <li><strong>Register the AAI client</strong> at
+      <a href="https://login.helmholtz.de/oauthhome">the self-service</a>,
+      using the redirect URIs <code>manage.py checkoidc</code> prints. Admins
+      review each request, so start early. A dev instance exists at
+      <code>login-dev.helmholtz.de</code> if you want to rehearse the flow
+      first.</li>
+  <li><strong>Put the credentials in the Secret</strong> — client ID, client
+      secret, and <code>CREDENTIAL_ENCRYPTION_KEY</code>. Generate that key
+      once. Rotating it makes every stored user key unreadable and every user
+      must paste theirs in again, so it belongs in a password manager, not in
+      anyone's shell history.</li>
+  <li><strong>Set <code>OIDC_ALLOWED_ENTITLEMENTS</code></strong> to the group
+      this service is for, and confirm with <code>manage.py checkoidc</code>
+      that the configured endpoints still match the provider's discovery
+      document. The endpoints cannot be guessed from the issuer URL.</li>
+  <li><strong>Run the model checks</strong> — <code>manage.py livecheck
+      --discover</code>, then <code>--queue</code>. Both are free and both
+      failing loudly is the best news you will get that day. Aliases and job
+      acceptance are the two things that change under you.</li>
+  <li><strong>Submit one real job per model</strong> through the portal itself,
+      with a normal user account rather than the admin, and follow it to the
+      downloaded archive.</li>
+  <li><strong>Then</strong> flip the approval flags, announce, and expect the
+      first week's mail to be about API keys rather than about science.</li>
+</ol>
+<p>
+  Announce it where the groups already read: a line in the SimLab's own news
+  or the JSC mailing list reaches the people this is built for, and a portal
+  nobody knows exists is a portal nobody uses. The <code>/queue/</code> page
+  and the admin's <em>Trouble</em> column are how you will know whether the
+  caps are right.
+</p>
+
+<h2>What will page you, and what to do</h2>
+<div class="table-scroll">
+<table class="jobs">
+<thead><tr><th>Sign</th><th>What it actually means</th><th>Do</th></tr></thead>
+<tbody>
+<tr>
+  <td data-label="Sign">The <em>Trouble</em> column is non-empty</td>
+  <td data-label="What it actually means">A job has been <em>running</em> past
+      <code>STALE_RUNNING_SECONDS</code>, or we cannot reach the service
+      about it. Neither proves the computation died — there is no lease or
+      liveness API upstream.</td>
+  <td data-label="Do">Contact the user with the job ID. Do not re-run for them: a second run
+      costs them GPU time and may duplicate a job that later completes.</td>
+</tr>
+<tr>
+  <td data-label="Sign">Users report failed submissions, several at once</td>
+  <td data-label="What it actually means">The shim or the GPU queue, not the portal. Login, forms and the job list
+      work without the shim.</td>
+  <td data-label="Do"><code>manage.py livecheck --queue</code> tells you in a minute whether
+      the service is accepting actions at all.</td>
+</tr>
+<tr>
+  <td data-label="Sign">Nobody can sign in, admin login works</td>
+  <td data-label="What it actually means">Helmholtz AAI, the client registration, the entitlements list, or an
+      expired provisioning of the client secret. The audit log records sign-in
+      and failed sign-in separately, so read it before changing settings.</td>
+  <td data-label="Do"><code>manage.py checkoidc</code>, then the audit log.</td>
+</tr>
+<tr>
+  <td data-label="Sign">Completed jobs have no downloadable archive</td>
+  <td data-label="What it actually means">The 48-hour window closed before the reconciler could fetch it, or the
+      reconciler is not running.</td>
+  <td data-label="Do">Check the reconciler's pod first; a second replica is worse than none,
+      because it duplicates downloads and completion mail. Inside the window,
+      the admin's re-fetch action retries.</td>
+</tr>
+<tr>
+  <td data-label="Sign">The artifact volume fills</td>
+  <td data-label="What it actually means">Nothing prunes it. Archives are kept forever by design, since deleting a
+      user's result is worse than storing it.</td>
+  <td data-label="Do">Prune on your own schedule, or the volume expiry takes the most recent
+      results with it when it dies.</td>
+</tr>
+<tr>
+  <td data-label="Sign">A model's alias stops existing</td>
+  <td data-label="What it actually means">Aliases are hardcoded in the specs and <code>GET /v1/models</code> is not
+      consulted at runtime, so the portal keeps submitting to a name the
+      service no longer answers to.</td>
+  <td data-label="Do"><code>manage.py livecheck --discover</code> lists what exists now. If an
+      alias moved, edit the spec — the docs regenerate from it.</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<h2>What the portal promises, and what it must never start promising</h2>
+<p>
+  The design decisions a new operator is most likely to undo by accident:
+</p>
+<ul>
+  <li><strong>No progress bar, no ETA, ever.</strong> The service does not
+      compute either, so the portal shows queue position, the reported stage
+      and the waiting reason, and says outright that there is no estimate. A
+      test fails if a percentage appears. A spinner added "just for feel"
+      would be the first lie in the product.</li>
+  <li><strong>A finished job is not a sound result.</strong> The plausibility
+      check measures backbone bond lengths, which chemistry fixes near
+      3.8&nbsp;&#197;. It catches outputs that are certainly broken; passing it
+      says nothing about whether a prediction is right. Do not let anyone
+      turn it into a green "valid" badge.</li>
+  <li><strong>Transient HTTP failures never fail a job.</strong> Status is left
+      alone, and the user is told the computation is unaffected. The one
+      exception is a 404, which means the job is genuinely gone.</li>
+  <li><strong>Each user brings their own Blablador key.</strong> GPU time
+      meters to them, and the key is encrypted at rest, shown back only as a
+      fingerprint, and never logged. Accepting an uploaded key by email, or
+      sitting at someone's terminal to enter it for them, breaks that.</li>
+  <li><strong>Cancellation is a race, and closing the tab is not a
+      cancellation.</strong> A running job can still complete after being
+      cancelled, so the wording says so.</li>
+  <li><strong>Sequences, structures and request bodies are never
+      logged.</strong> Problem reports arrive with job IDs, not inputs. Keep it
+      that way when adding a model: a debug print of the parameters is a data
+      leak with a plausible excuse.</li>
+</ul>
+
+<h2>Adding the sixth model</h2>
+<p>
+  One module under <code>jobs/specs/</code>: a form, and a
+  <code>build(cleaned)</code> returning the shim's <code>parameters</code>
+  object. Register a <code>ModelSpec</code> with the exact alias from
+  <code>GET /v1/models</code>, list the module in <code>load_specs()</code>,
+  and the homepage, queue view, result page and this documentation site all
+  pick it up. The value the group adds is in two fields the code cannot invent:
+  <code>caveats</code> — what a scientist must know before spending GPU time —
+  and <code>result_note</code>, what is actually in the archive.
+</p>
+<p>
+  The known-unvalidated paths are listed on the <em>Running the portal</em>
+  page in <code>docs/</code>, along with the checks that precede exposing one.
+  Treat that list as the group's own record of what has been proven to work.
+</p>
+
+<h2>Handing it over</h2>
+<p>
+  Everything needed to run the deployment is in the repository: the README for
+  the protocol and the traps, the <em>Running the portal</em> page in
+  <code>docs/</code> for the settings that matter, the env example for every
+  variable, and the admin for the job trail. What is <em>not</em> in the
+  repository is the operational state — open items, current flags, what is
+  blocked on whom — which lives in a gitignored note next to the code. Copy
+  that note somewhere the group will find it before the person who wrote it
+  leaves, and add to it the moment something is decided, because the code will
+  outlive the memory of why the caps are five and a hundred.
+</p>
+
+</main>
+<footer>
+  <p>Jülich Supercomputing Centre. Generated from the model registry by
+  <code>docs/build.py</code>.</p>
+</footer>
+</body>
+</html>

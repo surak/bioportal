@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+BASE_DIR = HERE.parent
 sys.path.insert(0, str(HERE.parent))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "bioportal.settings")
 
@@ -28,11 +29,20 @@ from jobs.registry import all_specs  # noqa: E402
 
 E = html.escape
 
+# The group that owns the deployment, from the JSC site.
+SDL_URL = (
+    "https://www.fz-juelich.de/en/jsc/about-us/structure/"
+    "simulation-and-data-labs/sdl-biology"
+)
+
 
 def nav(current: str, specs) -> str:
     links = [("index.html", "Overview")]
     links += [(f"{s.slug}.html", s.name) for s in specs]
-    links += [("operating.html", "Running the portal")]
+    links += [
+        ("operating.html", "Running the portal"),
+        ("handover.html", "For the SimLab"),
+    ]
     items = "".join(
         f'<a href="{href}"{" class=\'on\'" if href == current else ""}>{E(text)}</a>'
         for href, text in links
@@ -332,11 +342,21 @@ def index_page(specs) -> str:
     stored there.
   </p>
 </div>
+
+<h2>Who runs it</h2>
+<p>
+  BioPortal is operated by the <a href="{SDL_URL}">Simulation and Data Lab
+  Biology</a>. What the group owns, what is still blocked and how a model is
+  added is written down once, on <a href="handover.html">the handover page</a>,
+  which the portal also serves at <code>/handover/</code>.
+</p>
 """,
     )
 
 
 def operating_page(specs) -> str:
+    # Relative links on this page stay relative: it is published from docs/
+    # only. The handover page says what changes if it is served by the portal.
     return page(
         "operating.html",
         specs,
@@ -383,19 +403,85 @@ def operating_page(specs) -> str:
   <code>load_specs()</code>. The homepage, job list, queue view and these docs
   all pick it up automatically.
 </p>
+
+<h2>Models the portal does not offer</h2>
+<p>
+  The gap between what Blablador serves and what this portal offers is a
+  deliberate record, not an oversight: a model that has not been run through
+  the deployment reached users without anyone knowing which input paths work.
+  Before a spec is added, the path it will expose is exercised end to end
+  against the real service, on real GPU time. BioEmu2's multi-GPU route and
+  RFdiffusion3's advanced inputs are the current examples of paths that were
+  never validated, so their forms withhold them.
+</p>
+<p>
+  Turning one on is therefore a five-step change, and the first step is not
+  editing a form:
+</p>
+<ol class="steps">
+  <li><code>manage.py livecheck --discover</code> confirms the alias still
+      exists.</li>
+  <li><code>manage.py livecheck --queue</code> confirms the service will
+      accept the action for that model, which costs nothing.</li>
+  <li><code>manage.py livecheck --submit &lt;slug&gt;</code> runs one real job
+      and <code>--watch</code> follows it to the archive, on GPU time charged
+      to the key in use.</li>
+  <li>The form field is added, the run's parameters are noted in the spec's
+      caveats, and the docs are regenerated.</li>
+  <li>The new path is announced, because users who were told it did not exist
+      will not go looking for it.</li>
+</ol>
+
+<h2>What these docs are generated from</h2>
+<p>
+  Every field name, limit, default and caveat on the model pages is read out of
+  the registered forms and <code>ModelSpec</code>s by
+  <code>python docs/build.py</code>. Nothing on them is written by hand, so a
+  limit cannot be published that the portal will not enforce. If a page and the
+  portal disagree, the page is stale: run the generator. A test fails if the
+  committed pages are out of date, which is why a change to a form or a caveat
+  cannot ship with unchanged documentation.
+</p>
 """,
     )
 
 
+def handover_page(specs) -> str:
+    """For the group that owns the deployment, not for its users.
+
+    Written once, in templates/jobs/handover.html, because that is the copy the
+    deployment serves. This wraps it in the documentation site's chrome rather
+    than keeping a second version that would drift from it.
+    """
+    templ = (BASE_DIR / "templates" / "jobs" / "handover.html").read_text()
+    body = templ[templ.index("<h1>"): templ.rindex("{% endblock %}")]
+    return page("handover.html", specs, "For the SimLab", body)
+
+
 def main() -> None:
+    check = "--check" in sys.argv[1:]
     specs = all_specs()
-    (HERE / "index.html").write_text(index_page(specs))
-    (HERE / "operating.html").write_text(operating_page(specs))
-    for spec in specs:
-        (HERE / f"{spec.slug}.html").write_text(model_page(spec, specs))
+    written = {}
+    for name, text in (
+        ("index.html", index_page(specs)),
+        ("operating.html", operating_page(specs)),
+        ("handover.html", handover_page(specs)),
+        *((f"{s.slug}.html", model_page(s, specs)) for s in specs),
+    ):
+        written[name] = text
+    stale = [name for name, text in written.items()
+             if not (HERE / name).exists() or (HERE / name).read_text() != text]
+    if check:
+        if stale:
+            print("out of date: " + ", ".join(stale))
+            sys.exit(1)
+        print(f"{len(written)} pages up to date in {HERE}")
+        return
+    for name, text in written.items():
+        (HERE / name).write_text(text)
     # Tell GitHub Pages to serve these files as-is.
     (HERE / ".nojekyll").write_text("")
-    print(f"wrote {2 + len(specs)} pages to {HERE}")
+    print(f"wrote {len(written)} pages to {HERE}")
 
 
 if __name__ == "__main__":
