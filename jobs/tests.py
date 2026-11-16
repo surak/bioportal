@@ -509,6 +509,58 @@ class PageTests(Base):
             resp = self.client.get(reverse("jobs:submit", args=[spec.slug]))
             self.assertEqual(resp.status_code, 200, spec.slug)
 
+    def test_signed_out_home_does_not_offer_to_submit(self):
+        """Five buttons labelled "Submit a job" that all bounce to a login page
+        is a promise the page cannot keep; say what is actually needed."""
+        self.client.logout()
+        body = self.client.get(reverse("jobs:index")).content.decode()
+        self.assertNotIn(">Submit a job<", body)
+        self.assertEqual(body.count(">Sign in to submit<"), len(all_specs()))
+        self.assertIn("sign in before you can submit", body)
+
+    def test_each_card_returns_to_the_model_after_signing_in(self):
+        self.client.logout()
+        body = self.client.get(reverse("jobs:index")).content.decode()
+        for spec in all_specs():
+            self.assertIn(f"next=/models/{spec.slug}/", body)
+
+    def test_signed_in_home_asks_for_a_key_before_anything_else(self):
+        """A key is the second gate, and the cards point at it rather than at a
+        submit page that would refuse."""
+        ApiCredential.objects.all().delete()
+        body = self.client.get(reverse("jobs:index")).content.decode()
+        self.assertIn("Add your Blablador API key first", body)
+        self.assertNotIn(">Submit a job<", body)
+        self.assertEqual(body.count(">Add a key to submit<"), len(all_specs()))
+
+    def test_a_rejected_key_is_named_as_rejected(self):
+        ApiCredential.objects.update(rejected_at="2026-01-01T00:00:00Z")
+        resp = self.client.get(reverse("jobs:index"))
+        self.assertContains(resp, "Your API key was rejected")
+        self.assertContains(resp, "Replace my API key")
+
+    def test_a_user_with_a_working_key_gets_the_real_button(self):
+        resp = self.client.get(reverse("jobs:index"))
+        self.assertNotContains(resp, "Add a key to submit")
+        self.assertEqual(
+            resp.content.decode().count(">Submit a job<"), len(all_specs())
+        )
+
+    def test_no_markup_is_nested_inside_a_button(self):
+        """The submit button was once spliced together around a copied block
+        of markup, which left a whole <div> inside the <button> element."""
+        for slug in ("esmfold2", "bindcraft"):
+            body = self.client.get(reverse("jobs:submit", args=[slug])).content.decode()
+            for button in re.findall(r"<button.*?</button>", body, re.S):
+                self.assertNotIn("<div", button, slug)
+
+    def test_quota_disables_the_submit_button(self):
+        with override_settings(MAX_ACTIVE_JOBS_PER_USER=1):
+            self.make_job(status=Status.QUEUED)
+            self.make_job(status=Status.RUNNING)
+            body = self.client.get(reverse("jobs:submit", args=["esmfold2"])).content.decode()
+        self.assertRegex(body, r'<button type="submit"\s+disabled>')
+
     def test_queue_page_degrades_when_the_service_is_down(self):
         with mock.patch(
             "jobs.blablador._post",

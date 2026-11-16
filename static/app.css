@@ -3,7 +3,7 @@
   --card: #fff; --accent: #0b6e4f; --warn: #a8630c; --danger: #a32b22;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --bg:#17181a; --fg:#eceae6; --muted:#9b9690; --line:#30322f;
+  :root { --bg:#17181a; --fg:#eceae6; --muted:#9b9690; --line:#4b4e4a;
           --card:#1f2022; --accent:#4fbf92; --warn:#d8a24a; --danger:#e07b72; }
 }
 * { box-sizing: border-box; }
@@ -30,10 +30,17 @@ h1 { font-size:1.6rem; margin:0 0 .25rem; letter-spacing:-.01em; }
 .card p { font-size:.9rem; margin:.3rem 0 .8rem; }
 button, .button { display:inline-block; background:var(--accent); color:#fff; border:0;
   border-radius:8px; padding:.5rem .9rem; font:inherit; text-decoration:none; cursor:pointer; }
-button[disabled] { opacity:.5; cursor:not-allowed; }
+button[disabled] { opacity:.65; cursor:not-allowed; }
 button.danger { background:var(--danger); }
 .jobform p { margin:0 0 1rem; display:flex; flex-direction:column; gap:.3rem; }
 .jobform label { font-weight:550; font-size:.9rem; }
+/* A checkbox row is a label and its box side by side. Without this the column
+   layout above stretches the label and the box drifts to the middle of it. */
+.jobform p:has(> input[type=checkbox]) { flex-direction:row; align-items:center; gap:.45rem; }
+.jobform input[type=checkbox] { width:auto; margin:0; order:-1; align-self:center; }
+.jobform p:has(> input[type=checkbox]) label { font-weight:400; }
+/* A box for a number does not need the width of a sequence. */
+.jobform input[type=number] { max-width:9rem; }
 .jobform input[type=text], .jobform input[type=number], .jobform textarea, .jobform select {
   padding:.5rem; border:1px solid var(--line); border-radius:8px; background:var(--bg);
   color:var(--fg); font:inherit; width:100%; }

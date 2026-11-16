@@ -27,10 +27,21 @@ def index(request):
         request.user.is_staff
         or (settings.OIDC_RP_CLIENT_ID and settings.OIDC_ALLOWED_ENTITLEMENTS)
     )
+    # Two gates stand between this page and a submitted job: an account, then a
+    # personal key. The cards point at whichever one is missing rather than
+    # offering a button that bounces off a login or a refusal.
+    credential = getattr(request.user, "credential", None) if request.user.is_authenticated else None
+    needs_key = request.user.is_authenticated and (
+        credential is None or credential.is_rejected
+    )
     return render(
         request,
         "jobs/index.html",
-        {"specs": registry.all_specs(), "show_handover": show_handover},
+        {
+            "specs": registry.all_specs(),
+            "show_handover": show_handover,
+            "needs_key": needs_key,
+        },
     )
 
 
