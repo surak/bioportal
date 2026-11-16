@@ -12,11 +12,13 @@ body { margin:0; background:var(--bg); color:var(--fg);
 main { max-width: 62rem; margin: 0 auto; padding: 2rem 1rem 4rem; }
 a { color: var(--accent); }
 .topbar { display:flex; justify-content:space-between; align-items:center; gap:1rem;
-  padding:.75rem 1rem; border-bottom:1px solid var(--line); background:var(--card); }
+  padding:.75rem 1rem; border-bottom:1px solid var(--line); background:var(--card);
+  flex-wrap:wrap; }
 .brand { font-weight:650; text-decoration:none; color:var(--fg);
   display:inline-flex; align-items:center; gap:.5rem; }
 .brand img { display:block; height:2rem; width:auto; }
-.topbar nav { display:flex; align-items:center; gap:1rem; flex-wrap:wrap; }
+.topbar nav { display:flex; align-items:center; gap:.5rem 1rem; flex-wrap:wrap;
+  justify-content:flex-end; row-gap:.35rem; }
 .who { color:var(--muted); font-size:.9rem; }
 .inline { display:inline; }
 .linkish { background:none; border:0; color:var(--accent); cursor:pointer; font:inherit; padding:0; }
@@ -28,6 +30,53 @@ h1 { font-size:1.6rem; margin:0 0 .25rem; letter-spacing:-.01em; }
 .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:1.1rem; }
 .card h2 { font-size:1.05rem; margin:0 0 .4rem; }
 .card p { font-size:.9rem; margin:.3rem 0 .8rem; }
+/* The one thing standing between the visitor and a job, said once: a strip with
+   the reason on the left and the single action on the right. */
+.gate { display:flex; align-items:center; justify-content:space-between; gap:1.25rem;
+  background:var(--card); border:1px solid var(--line); border-left:3px solid var(--accent);
+  border-radius:10px; padding:.9rem 1.1rem; margin:1.5rem 0 0; }
+.gate.warn { border-left-color:var(--warn); }
+.gate p { margin:0; font-size:.92rem; }
+.gate strong { display:block; margin-bottom:.15rem; }
+.gate .button { flex:none; }
+@media (max-width:34rem) { .gate { flex-direction:column; align-items:flex-start; gap:.8rem; } }
+/* The models are a list, not five identical buttons. The whole row is the
+   link; the alias is what a user recognises when talking to support. The
+   handover note below it is a footnote and needs room to read as one. */
+.models + .hint { margin-top:2rem; }
+.models { list-style:none; padding:0; margin:2rem 0 0; display:grid; gap:.6rem; }
+.model { display:flex; align-items:center; justify-content:space-between; gap:1rem;
+  background:var(--card); border:1px solid var(--line); border-radius:10px;
+  padding:.9rem 1.1rem; color:inherit; text-decoration:none; }
+a.model:hover, a.model:focus-visible { border-color:var(--accent); }
+a.model:hover .go { text-decoration:underline; }
+.model .body { min-width:0; }
+.model h2 { font-size:1.05rem; margin:0; }
+.model .blurb { font-size:.9rem; color:var(--muted); margin:.15rem 0 0; }
+.model .side { flex:none; display:flex; flex-direction:column; align-items:flex-end;
+  gap:.25rem; text-align:right; }
+.model code { font-size:.75rem; color:var(--muted); }
+.model .go { font-size:.9rem; font-weight:550; color:var(--accent); white-space:nowrap; }
+/* On a phone the nav does not fit beside the brand. Wrap it under the brand and
+   left-align it, rather than letting six items break into two ragged rows. */
+@media (max-width:34rem) {
+  .topbar { flex-direction:column; align-items:flex-start; gap:.5rem; }
+  /* Six items do not fit beside the brand, so they wrap - but a smaller,
+     tighter nav keeps them to two balanced rows instead of five-and-one. */
+  .topbar nav { justify-content:flex-start; gap:.4rem .85rem; font-size:.9rem; }
+  /* The header already carries the mark; on a phone the hero wordmark repeats
+     it and pushes the first model below the fold. */
+  .hero-logo { max-width:14rem; margin-bottom:.9rem; }
+  h1 { font-size:1.4rem; }
+  .model { flex-direction:column; align-items:flex-start; gap:.55rem; }
+  .model .side { flex-direction:row; align-items:center; justify-content:space-between;
+    width:100%; gap:.75rem; }
+}
+/* Locked rows are greyed, not disabled: the alias and blurb are still the
+   useful part when the visitor cannot submit yet. */
+.model.locked { background:none; border-style:dashed; opacity:.75; }
+.model.locked h2, .model.locked code { color:var(--muted); }
+.model.locked .blurb { opacity:.85; }
 button, .button { display:inline-block; background:var(--accent); color:#fff; border:0;
   border-radius:8px; padding:.5rem .9rem; font:inherit; text-decoration:none; cursor:pointer; }
 button[disabled] { opacity:.65; cursor:not-allowed; }

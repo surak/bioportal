@@ -509,42 +509,61 @@ class PageTests(Base):
             resp = self.client.get(reverse("jobs:submit", args=[spec.slug]))
             self.assertEqual(resp.status_code, 200, spec.slug)
 
-    def test_signed_out_home_does_not_offer_to_submit(self):
-        """Five buttons labelled "Submit a job" that all bounce to a login page
-        is a promise the page cannot keep; say what is actually needed."""
+    # --- the home page's two gates -------------------------------------
+    #
+    # The page used to answer a locked gate with five identical buttons, each
+    # of which led to the same place. It now says the reason once and lists the
+    # models as rows: links when the gate is open, inert when it is not.
+
+    def test_signed_out_home_has_one_action_and_a_quiet_list(self):
         self.client.logout()
         body = self.client.get(reverse("jobs:index")).content.decode()
-        self.assertNotIn(">Submit a job<", body)
-        self.assertEqual(body.count(">Sign in to submit<"), len(all_specs()))
-        self.assertIn("sign in before you can submit", body)
+        self.assertIn("Sign in to submit a job", body)
+        # One in the header, one in the gate: never one per model.
+        self.assertEqual(body.count('href="' + reverse("oidc_authentication_init") + '"'), 2)
+        # No per-model call to action at all.
+        self.assertNotIn(">Sign in to submit<", body)
+        self.assertNotIn("<a class=\"model\"", body)
+        self.assertEqual(body.count('class="model locked"'), len(all_specs()))
 
-    def test_each_card_returns_to_the_model_after_signing_in(self):
+    def test_the_locked_list_still_says_what_the_models_are(self):
+        """Inert is not empty: the alias and the blurb are the useful part."""
         self.client.logout()
         body = self.client.get(reverse("jobs:index")).content.decode()
         for spec in all_specs():
-            self.assertIn(f"next=/models/{spec.slug}/", body)
+            self.assertIn(spec.name, body)
+            self.assertIn(spec.alias, body)
+            self.assertIn(spec.blurb, body)
 
-    def test_signed_in_home_asks_for_a_key_before_anything_else(self):
-        """A key is the second gate, and the cards point at it rather than at a
-        submit page that would refuse."""
+    def test_a_user_with_a_key_can_click_straight_through(self):
+        body = self.client.get(reverse("jobs:index")).content.decode()
+        self.assertNotIn("class=\"gate", body)
+        for spec in all_specs():
+            self.assertIn(f'<a class="model" href="/models/{spec.slug}/">', body)
+
+    def test_a_user_without_a_key_is_sent_to_the_key_page_once(self):
+        """A key is the second gate; the models stay inert until it is closed."""
         ApiCredential.objects.all().delete()
         body = self.client.get(reverse("jobs:index")).content.decode()
-        self.assertIn("Add your Blablador API key first", body)
-        self.assertNotIn(">Submit a job<", body)
-        self.assertEqual(body.count(">Add a key to submit<"), len(all_specs()))
+        self.assertIn("Add your Blablador API key to submit a job", body)
+        self.assertIn('class="gate warn"', body)
+        self.assertNotIn("<a class=\"model\"", body)
+        # The nav link plus the single gate button, and nothing per model.
+        self.assertEqual(body.count('href="' + reverse("jobs:credential") + '"'), 2)
+        self.assertEqual(body.count('class="model locked"'), len(all_specs()))
 
     def test_a_rejected_key_is_named_as_rejected(self):
         ApiCredential.objects.update(rejected_at="2026-01-01T00:00:00Z")
-        resp = self.client.get(reverse("jobs:index"))
-        self.assertContains(resp, "Your API key was rejected")
-        self.assertContains(resp, "Replace my API key")
+        body = self.client.get(reverse("jobs:index")).content.decode()
+        self.assertIn("Your API key was rejected", body)
+        self.assertIn("Replace my key", body)
 
-    def test_a_user_with_a_working_key_gets_the_real_button(self):
-        resp = self.client.get(reverse("jobs:index"))
-        self.assertNotContains(resp, "Add a key to submit")
-        self.assertEqual(
-            resp.content.decode().count(">Submit a job<"), len(all_specs())
-        )
+    def test_the_gate_never_renders_a_template_comment(self):
+        """{# ... #} is single-line only: a multi-line comment leaks as text."""
+        for path in (reverse("jobs:index"), reverse("jobs:list")):
+            body = self.client.get(path).content.decode()
+            self.assertNotIn("{#", body)
+            self.assertNotIn("#}", body)
 
     def test_no_markup_is_nested_inside_a_button(self):
         """The submit button was once spliced together around a copied block
@@ -582,8 +601,6 @@ class PageTests(Base):
 
     def test_no_invented_progress_or_eta(self):
         """No percentage, progress bar or ETA: the service publishes none."""
-        import re
-
         job = self.make_job(status=Status.RUNNING)
         body = self.client.get(reverse("jobs:status", args=[job.pk])).content.decode()
         self.assertNotRegex(body, r"\d+\s*%")
