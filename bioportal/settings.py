@@ -62,6 +62,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "jobs.context_processors.auth_capabilities",
             ],
         },
     },
@@ -122,6 +123,15 @@ AUTHENTICATION_BACKENDS = [
 
 OIDC_RP_CLIENT_ID = _env("OIDC_CLIENT_ID")
 OIDC_RP_CLIENT_SECRET = _env("OIDC_CLIENT_SECRET")
+
+# Whether federated sign-in can actually work. Registering a client with
+# Helmholtz AAI is an administrator's job that takes days of review, so the
+# deployment spends most of its life without one - and until it has one the
+# authorize endpoint answers "Missing client_id parameter". Nothing in the UI
+# may offer the link while this is false: a sign-in button that leads to an
+# OAuth error is worse than no button, because it looks like the visitor's
+# fault.
+OIDC_AVAILABLE = bool(OIDC_RP_CLIENT_ID and OIDC_RP_CLIENT_SECRET)
 OIDC_RP_SIGN_ALGO = "RS256"
 
 # Taken from the provider's discovery document, not derived from the issuer:

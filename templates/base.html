@@ -26,7 +26,11 @@
         {% csrf_token %}<button class="linkish" type="submit">Sign out</button>
       </form>
     {% else %}
-      <a href="{% url 'oidc_authentication_init' %}">Sign in with JSC</a>
+      {% if oidc_available %}
+        <a href="{% url 'oidc_authentication_init' %}">Sign in with JSC</a>
+      {% else %}
+        <span class="who">Sign-in not configured</span>
+      {% endif %}
     {% endif %}
   </nav>
 </header>

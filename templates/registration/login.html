@@ -8,7 +8,16 @@
   handling of your data described in the
   <a href="{% url 'jobs:privacy' %}">privacy statement</a>.
 </p>
+{% if oidc_available %}
 <p><a class="button" href="{% url 'oidc_authentication_init' %}">Sign in with JSC / Helmholtz AAI</a></p>
+{% else %}
+<p class="notice warn">
+  <strong>JSC sign-in is not available yet.</strong>
+  A Helmholtz AAI client has not been registered for this deployment, so
+  federated sign-in cannot work. Only the administrator account can sign in
+  until it is.
+</p>
+{% endif %}
 <details class="localauth">
   <summary>Administrator sign-in</summary>
   <form method="post">

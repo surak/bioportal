@@ -517,14 +517,53 @@ class PageTests(Base):
 
     def test_signed_out_home_has_one_action_and_a_quiet_list(self):
         self.client.logout()
-        body = self.client.get(reverse("jobs:index")).content.decode()
-        self.assertIn("Sign in to submit a job", body)
-        # One in the header, one in the gate: never one per model.
-        self.assertEqual(body.count('href="' + reverse("oidc_authentication_init") + '"'), 2)
-        # No per-model call to action at all.
-        self.assertNotIn(">Sign in to submit<", body)
-        self.assertNotIn("<a class=\"model\"", body)
-        self.assertEqual(body.count('class="model locked"'), len(all_specs()))
+        with override_settings(
+            OIDC_RP_CLIENT_ID="bioportal", OIDC_RP_CLIENT_SECRET="secret", OIDC_AVAILABLE=True
+        ):
+            body = self.client.get(reverse("jobs:index")).content.decode()
+            self.assertIn("Sign in to submit a job", body)
+            # One in the header, one in the gate: never one per model.
+            self.assertEqual(
+                body.count('href="' + reverse("oidc_authentication_init") + '"'), 2
+            )
+            # No per-model call to action at all.
+            self.assertNotIn(">Sign in to submit<", body)
+            self.assertNotIn("<a class=\"model\"", body)
+            self.assertEqual(body.count('class="model locked"'), len(all_specs()))
+
+    def test_no_sign_in_link_is_offered_before_a_client_is_registered(self):
+        """A dead sign-in link reads as the visitor's own mistake.
+
+        Without a registered AAI client the authorize endpoint rejects the
+        request with "Missing client_id parameter", so no template may render
+        the link - not the header, not the gate, not the login page.
+        """
+        self.client.logout()
+        with override_settings(
+            OIDC_RP_CLIENT_ID="", OIDC_RP_CLIENT_SECRET="", OIDC_AVAILABLE=False
+        ):
+            for url in (reverse("jobs:index"), reverse("login")):
+                body = self.client.get(url).content.decode()
+                self.assertNotIn(
+                    reverse("oidc_authentication_init"),
+                    body,
+                    f"{url} still links to the OAuth endpoint",
+                )
+            home = self.client.get(reverse("jobs:index")).content.decode()
+            self.assertIn("Submissions are not open yet", home)
+            self.assertIn("Sign-in not configured", home)
+            login = self.client.get(reverse("login")).content.decode()
+            self.assertIn("JSC sign-in is not available yet", login)
+
+    def test_the_federated_link_returns_once_a_client_exists(self):
+        self.client.logout()
+        with override_settings(
+            OIDC_RP_CLIENT_ID="bioportal", OIDC_RP_CLIENT_SECRET="secret", OIDC_AVAILABLE=True
+        ):
+            body = self.client.get(reverse("jobs:index")).content.decode()
+            self.assertIn(reverse("oidc_authentication_init"), body)
+            self.assertIn("Sign in to submit a job", body)
+            self.assertNotIn("Sign-in not configured", body)
 
     def test_the_locked_list_still_says_what_the_models_are(self):
         """Inert is not empty: the alias and the blurb are the useful part."""

@@ -29,12 +29,21 @@
   </div>
 {% elif not user.is_authenticated %}
   <div class="gate">
-    <p>
-      <strong>Sign in to submit a job.</strong>
-      BioPortal runs GPU jobs against your own JSC account, so it needs to know
-      who you are before it can queue anything.
-    </p>
-    <a class="button" href="{% url 'oidc_authentication_init' %}">Sign in with JSC</a>
+    {% if oidc_available %}
+      <p>
+        <strong>Sign in to submit a job.</strong>
+        BioPortal runs GPU jobs against your own JSC account, so it needs to know
+        who you are before it can queue anything.
+      </p>
+      <a class="button" href="{% url 'oidc_authentication_init' %}">Sign in with JSC</a>
+    {% else %}
+      <p>
+        <strong>Submissions are not open yet.</strong>
+        Sign-in with a JSC account is still being set up, so there is no way to
+        queue a job right now. The models below are what will be available, and
+        each page describes its input so you can prepare a run.
+      </p>
+    {% endif %}
   </div>
 {% endif %}
 
