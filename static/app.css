@@ -90,7 +90,11 @@ button.danger { background:var(--danger); }
 .jobform p:has(> input[type=checkbox]) label { font-weight:400; }
 /* A box for a number does not need the width of a sequence. */
 .jobform input[type=number] { max-width:9rem; }
-.jobform input[type=text], .jobform input[type=number], .jobform textarea, .jobform select {
+/* Password and email boxes are the same box: the sign-in and sign-up forms
+   are jobform-shaped, and an unstyled box next to a styled one reads as an
+   error before anything is typed into it. */
+.jobform input[type=text], .jobform input[type=number], .jobform input[type=email],
+.jobform input[type=password], .jobform textarea, .jobform select {
   padding:.5rem; border:1px solid var(--line); border-radius:8px; background:var(--bg);
   color:var(--fg); font:inherit; width:100%; }
 .jobform textarea { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.85rem; }
