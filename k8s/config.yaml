@@ -39,6 +39,10 @@ data:
   OIDC_ISSUER: "https://login.helmholtz.de/oauth2"
   # Empty accepts any successful Helmholtz AAI login. Set before announcing.
   OIDC_ALLOWED_ENTITLEMENTS: ""
+  # No AAI client is registered yet, so federated sign-in cannot work and this
+  # portal would otherwise be a catalogue nobody can submit through. Turned off
+  # by itself the moment OIDC_CLIENT_ID and OIDC_CLIENT_SECRET are set.
+  ALLOW_SELF_SIGNUP: "1"
 
   EMAIL_BACKEND: "django.core.mail.backends.smtp.EmailBackend"
   EMAIL_HOST: "mail.fz-juelich.de"
