@@ -6,6 +6,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -349,6 +350,34 @@ def credential(request):
         "jobs/credential.html",
         {"form": form, "credential": existing},
     )
+
+
+def signup(request):
+    """A local account, while federated sign-in cannot work.
+
+    The portal stores a key and a queue of jobs per user, so a visitor who
+    cannot sign in cannot submit anything either: with no AAI client the
+    choice is a local account or a catalogue nobody can use. Closed again the
+    moment a client is registered - ALLOW_SELF_SIGNUP is false as soon as
+    OIDC_AVAILABLE is true, so there is never a second door beside a working
+    federated one.
+    """
+    if not settings.ALLOW_SELF_SIGNUP:
+        raise Http404("no such page")
+
+    if request.method == "POST":
+        form = jobforms.SignupForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+            messages.success(
+                request, "Your account is ready. Add your Blablador API key next."
+            )
+            return redirect("jobs:credential")
+    else:
+        form = jobforms.SignupForm()
+
+    return render(request, "registration/signup.html", {"form": form})
 
 
 def healthz(request):

@@ -44,7 +44,26 @@ class JscOIDCBackend(OIDCAuthenticationBackend):
             log.warning("refused sign-in for deactivated user %s", user.pk)
             audit.warning("login-refused user=%s reason=inactive", user.username)
             return None
+        if user is not None:
+            self._release_local_password(user)
         return user
+
+    def _release_local_password(self, user) -> None:
+        """A federated sign-in takes over the local account it matches.
+
+        Accounts are matched by email address, and while no AAI client exists
+        anyone can create a local account under any address. If such an account
+        kept its password, whoever created it would keep a second way into an
+        account that a federated login has since handed to someone else. The
+        staff account is left alone: it is the administrator's, and email is
+        not what authenticates it.
+        """
+        if user.is_staff or not user.has_usable_password():
+            return
+        user.set_unusable_password()
+        user.save(update_fields=["password"])
+        log.info("local password released for federated account %s", user.pk)
+        audit.info("password-released user=%s reason=federated-login", user.username)
 
     def create_user(self, claims):
         user = super().create_user(claims)

@@ -10,14 +10,31 @@
 </p>
 {% if oidc_available %}
 <p><a class="button" href="{% url 'oidc_authentication_init' %}">Sign in with JSC / Helmholtz AAI</a></p>
+<p class="hint">
+  Use the account of your institution — that is the identity your jobs and your
+  stored API key belong to.
+</p>
 {% else %}
-<p class="notice warn">
-  <strong>JSC sign-in is not available yet.</strong>
-  A Helmholtz AAI client has not been registered for this deployment, so
-  federated sign-in cannot work. Only the administrator account can sign in
-  until it is.
+<p class="notice">
+  <strong>Sign in with the account you created here.</strong>
+  JSC sign-in through Helmholtz AAI is not registered for this deployment yet,
+  so the portal issues its own accounts in the meantime. When federated sign-in
+  arrives, the account with the same email address keeps its jobs.
+</p>
+<form method="post" class="jobform">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <input type="hidden" name="next" value="{{ next }}">
+  <button type="submit">Sign in</button>
+</form>
+{% if allow_self_signup %}
+<p class="hint">
+  No account yet? <a href="{% url 'jobs:signup' %}">Create one</a> — it takes an
+  email address and a password, and the API key comes next.
 </p>
 {% endif %}
+{% endif %}
+{% if oidc_available %}
 <details class="localauth">
   <summary>Administrator sign-in</summary>
   <form method="post">
@@ -27,4 +44,5 @@
     <button type="submit">Sign in</button>
   </form>
 </details>
+{% endif %}
 {% endblock %}

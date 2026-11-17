@@ -18,5 +18,6 @@ urlpatterns = [
     path("terms/", views.terms, name="terms"),
     path("handover/", views.handover, name="handover"),
     path("account/key/", views.credential, name="credential"),
+    path("signup/", views.signup, name="signup"),
     path("models/<slug:slug>/", views.submit, name="submit"),
 ]

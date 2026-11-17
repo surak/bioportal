@@ -9,15 +9,16 @@
 
 <div class="callout">
   <p>
-    <strong>Three things are blocked on people, not on code.</strong> No
+    <strong>Two things are blocked on people, not on code.</strong> No
     Helmholtz AAI client is registered, so nobody can sign in with a JSC
-    account yet. <code>OIDC_ALLOWED_ENTITLEMENTS</code> is empty, which would
-    accept <em>any</em> successful AAI login, including accounts outside the
-    group this service is for. And DNS for
-    <code>bioportal.blablador.fz-juelich.de</code> does not resolve, so no
-    certificate can be issued and the ingress answers nothing. The first is an
-    AAI review queue, the second is one environment variable, the third is one
-    A record to <code>134.94.198.59</code>.
+    account yet — the portal issues its own accounts instead
+    (<code>ALLOW_SELF_SIGNUP</code>), which is a stopgap, not a policy: local
+    accounts mean local passwords, and nobody's institutional identity is
+    vouched for. <code>OIDC_ALLOWED_ENTITLEMENTS</code> is also empty, which
+    would accept <em>any</em> successful AAI login, including accounts outside
+    the group this service is for. Both are one entry in the AAI review queue
+    and one environment variable. The domain, the certificate and the ingress
+    are done.
   </p>
 </div>
 
@@ -95,7 +96,10 @@
       using the redirect URIs <code>manage.py checkoidc</code> prints. Admins
       review each request, so start early. A dev instance exists at
       <code>login-dev.helmholtz.de</code> if you want to rehearse the flow
-      first.</li>
+      first. Until it is registered, sign-in is a local account made at
+      <code>/signup/</code>; setting <code>OIDC_CLIENT_ID</code> and
+      <code>OIDC_CLIENT_SECRET</code> closes that door and opens the
+      federated one.</li>
   <li><strong>Put the credentials in the Secret</strong> — client ID, client
       secret, and <code>CREDENTIAL_ENCRYPTION_KEY</code>. Generate that key
       once. Rotating it makes every stored user key unreadable and every user

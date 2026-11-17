@@ -28,8 +28,11 @@
     {% else %}
       {% if oidc_available %}
         <a href="{% url 'oidc_authentication_init' %}">Sign in with JSC</a>
+      {% elif allow_self_signup %}
+        <a href="{% url 'login' %}">Sign in</a>
+        <a href="{% url 'jobs:signup' %}">Create account</a>
       {% else %}
-        <span class="who">Sign-in not configured</span>
+        <a href="{% url 'login' %}">Sign in</a>
       {% endif %}
     {% endif %}
   </nav>

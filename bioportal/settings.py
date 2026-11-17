@@ -114,8 +114,10 @@ STATICFILES_DIRS = [BASE_DIR / "static"]
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --- Authentication -------------------------------------------------------
-# Two doors: Helmholtz AAI / JSC Unity for users, and Django's own local
-# password login for the administrator.
+# Two doors: Helmholtz AAI / JSC Unity for users once a client is registered,
+# and a local account - self-service while the client is pending, otherwise the
+# administrator's. Both name a person, and everything the portal stores hangs
+# off that person.
 AUTHENTICATION_BACKENDS = [
     "jobs.auth.JscOIDCBackend",
     "django.contrib.auth.backends.ModelBackend",
@@ -133,6 +135,14 @@ OIDC_RP_CLIENT_SECRET = _env("OIDC_CLIENT_SECRET")
 # fault.
 OIDC_AVAILABLE = bool(OIDC_RP_CLIENT_ID and OIDC_RP_CLIENT_SECRET)
 OIDC_RP_SIGN_ALGO = "RS256"
+
+# While no AAI client exists, federated sign-in cannot work and a deployment
+# that offers no other door is a catalogue nobody can use. A local account
+# then does what the federated one will: it identifies the person, so their
+# jobs, their stored key and their quota are theirs. Off unless switched on,
+# and never on beside a working AAI client - one door, so nobody has to guess
+# which account holds their jobs.
+ALLOW_SELF_SIGNUP = _bool("ALLOW_SELF_SIGNUP", False) and not OIDC_AVAILABLE
 
 # Taken from the provider's discovery document, not derived from the issuer:
 # two of these do not follow the pattern you would guess. Verify with

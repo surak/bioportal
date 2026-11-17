@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Create an account · BioPortal{% endblock %}
+{% block content %}
+<h1>Create an account</h1>
+<p class="hint">
+  BioPortal keeps your jobs, your stored API key and your queue separate from
+  everyone else's, so it needs to know who you are. By creating an account you
+  accept the <a href="{% url 'jobs:terms' %}">acceptable use conditions</a> and
+  the handling of your data described in the
+  <a href="{% url 'jobs:privacy' %}">privacy statement</a>.
+</p>
+<p class="hint">
+  JSC sign-in through Helmholtz AAI is not registered for this deployment yet,
+  so accounts are local in the meantime. Use the email address you are known by
+  at your institute: when federated sign-in arrives, the account with that
+  address keeps its jobs.
+</p>
+<form method="post" class="jobform">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <button type="submit">Create account</button>
+</form>
+<p class="hint">
+  Already have one? <a href="{% url 'login' %}">Sign in</a>.
+</p>
+{% endblock %}

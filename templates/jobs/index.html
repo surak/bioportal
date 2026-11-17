@@ -36,13 +36,20 @@
         who you are before it can queue anything.
       </p>
       <a class="button" href="{% url 'oidc_authentication_init' %}">Sign in with JSC</a>
+    {% elif allow_self_signup %}
+      <p>
+        <strong>Create an account to submit a job.</strong>
+        Jobs run against your own Blablador key, so the portal needs to know
+        whose they are. JSC sign-in is still being registered; until then an
+        account here takes an email address and a password.
+      </p>
+      <a class="button" href="{% url 'jobs:signup' %}">Create an account</a>
     {% else %}
       <p>
-        <strong>Submissions are not open yet.</strong>
-        Sign-in with a JSC account is still being set up, so there is no way to
-        queue a job right now. The models below are what will be available, and
-        each page describes its input so you can prepare a run.
+        <strong>Sign in to submit a job.</strong>
+        Accounts are issued by the service operators.
       </p>
+      <a class="button" href="{% url 'login' %}">Sign in</a>
     {% endif %}
   </div>
 {% endif %}

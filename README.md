@@ -295,6 +295,13 @@ under `/oauth2-as/oauth2-authz` and the JWKS at `/jwk`, not `/jwks`.
 
 - **Users** — `/oidc/authenticate/`, Helmholtz AAI. `OIDC_ALLOWED_ENTITLEMENTS`
   restricts sign-in to the entitlements listed in it.
+- **Users, until the client exists** — `/signup/`, a local account, allowed by
+  `ALLOW_SELF_SIGNUP`. An AAI client takes review, and without one the portal
+  would be a catalogue nobody can submit through. The flag is ignored the
+  moment `OIDC_CLIENT_ID` and `OIDC_CLIENT_SECRET` are set, so there is only
+  ever one door. A federated login that matches a local account by email takes
+  the local password away, so whoever registered the address first does not
+  keep a second way in (the staff account is exempt: its login is local).
 - **You** — Django local password login at `/login/`, full admin at `/admin/`:
   every job, its events, the "Trouble" column, re-notify and re-fetch actions.
 

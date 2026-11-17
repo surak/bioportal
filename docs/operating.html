@@ -37,6 +37,7 @@
 <tr><td><code>MAX_ACTIVE_JOBS_PER_USER</code></td><td>Per-user fairness. The whole service accepts about 100 queued jobs and has a limited number of GPU slots, so set this deliberately before opening the portal up.</td></tr>
 <tr><td><code>STALE_RUNNING_SECONDS</code></td><td>How long a job may sit in <em>running</em> before it is flagged. Flagged jobs are never auto-failed: a lost worker cannot be distinguished from a slow job.</td></tr>
 <tr><td><code>OIDC_ALLOWED_ENTITLEMENTS</code></td><td>Restricts sign-in to your group. Empty accepts any successful Helmholtz AAI login — fine for a pilot, tighten before announcing.</td></tr>
+<tr><td><code>ALLOW_SELF_SIGNUP</code></td><td>Lets visitors create an account at <code>/signup/</code> while no Helmholtz AAI client is registered — an AAI client takes review, and without one nobody could submit anything at all. Ignored once <code>OIDC_CLIENT_ID</code> and <code>OIDC_CLIENT_SECRET</code> are set: a working federated login closes it, so a person has exactly one account their jobs hang off.</td></tr>
 </tbody>
 </table>
 

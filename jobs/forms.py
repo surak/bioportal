@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 
 from django import forms
+from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth.models import User
 
 # One-letter amino acid codes, plus X for unknown.
 AA_RE = re.compile(r"^[ACDEFGHIKLMNPQRSTVWYX]+$")
@@ -130,3 +132,28 @@ class ApiKeyForm(forms.Form):
         if len(key) < 16 or any(c.isspace() for c in key):
             raise forms.ValidationError("That does not look like an API key.")
         return key
+
+
+class SignupForm(UserCreationForm):
+    """A local account, for the time without a registered AAI client.
+
+    The email address is required: it is where the completion notice for a job
+    goes, and it is what a federated login will be matched to later.
+    """
+
+    email = forms.EmailField(
+        label="Email address",
+        help_text="Where the completion notice for your jobs is sent.",
+    )
+
+    class Meta(UserCreationForm.Meta):
+        model = User
+        fields = ("username", "email")
+
+    def clean_email(self):
+        email = (self.cleaned_data["email"] or "").strip()
+        if User.objects.filter(email__iexact=email).exists():
+            raise forms.ValidationError(
+                "An account with this address already exists. Sign in instead."
+            )
+        return email

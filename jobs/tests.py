@@ -536,11 +536,15 @@ class PageTests(Base):
 
         Without a registered AAI client the authorize endpoint rejects the
         request with "Missing client_id parameter", so no template may render
-        the link - not the header, not the gate, not the login page.
+        the link - not the header, not the gate, not the login page. A local
+        account stands in for it.
         """
         self.client.logout()
         with override_settings(
-            OIDC_RP_CLIENT_ID="", OIDC_RP_CLIENT_SECRET="", OIDC_AVAILABLE=False
+            OIDC_RP_CLIENT_ID="",
+            OIDC_RP_CLIENT_SECRET="",
+            OIDC_AVAILABLE=False,
+            ALLOW_SELF_SIGNUP=False,
         ):
             for url in (reverse("jobs:index"), reverse("login")):
                 body = self.client.get(url).content.decode()
@@ -550,10 +554,81 @@ class PageTests(Base):
                     f"{url} still links to the OAuth endpoint",
                 )
             home = self.client.get(reverse("jobs:index")).content.decode()
-            self.assertIn("Submissions are not open yet", home)
-            self.assertIn("Sign-in not configured", home)
+            self.assertIn("Sign in to submit a job", home)
+            self.assertIn('href="' + reverse("login") + '"', home)
             login = self.client.get(reverse("login")).content.decode()
-            self.assertIn("JSC sign-in is not available yet", login)
+            self.assertIn("Sign in with the account you created here", login)
+            self.assertIn('name="username"', login)
+            self.assertIn('name="password"', login)
+
+    def test_self_service_signup_is_offered_when_it_is_on(self):
+        """Without an AAI client, the portal's own accounts are the way in."""
+        self.client.logout()
+        with override_settings(
+            OIDC_AVAILABLE=False, ALLOW_SELF_SIGNUP=True
+        ):
+            home = self.client.get(reverse("jobs:index")).content.decode()
+            self.assertIn("Create an account to submit a job", home)
+            self.assertIn(
+                'href="' + reverse("jobs:signup") + '"', home
+            )
+            self.assertNotIn("Submissions are not open yet", home)
+            login = self.client.get(reverse("login")).content.decode()
+            self.assertIn('href="' + reverse("jobs:signup") + '"', login)
+            self.assertIn('name="password"', login)
+
+    def test_signup_is_closed_beside_a_working_federated_login(self):
+        self.client.logout()
+        with override_settings(OIDC_AVAILABLE=True, ALLOW_SELF_SIGNUP=False):
+            self.assertEqual(
+                self.client.get(reverse("jobs:signup")).status_code, 404
+            )
+            body = self.client.get(reverse("jobs:index")).content.decode()
+            self.assertNotIn(reverse("jobs:signup"), body)
+
+    def test_a_self_made_account_can_submit_its_own_jobs(self):
+        self.client.logout()
+        with override_settings(OIDC_AVAILABLE=False, ALLOW_SELF_SIGNUP=True):
+            response = self.client.post(
+                reverse("jobs:signup"),
+                {
+                    "username": "newcomer",
+                    "email": "newcomer@example.org",
+                    "password1": "a-long-enough-passphrase",
+                    "password2": "a-long-enough-passphrase",
+                },
+            )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], reverse("jobs:credential"))
+        user = User.objects.get(username="newcomer")
+        self.assertEqual(user.email, "newcomer@example.org")
+        # Signed in by the same request, and there is no key yet: the gate now
+        # asks for one instead of asking who they are.
+        body = self.client.get(reverse("jobs:index")).content.decode()
+        self.assertIn("Add your Blablador API key to submit a job", body)
+        self.assertNotIn("Create an account to submit a job", body)
+
+    def test_a_second_account_cannot_claim_an_email_address(self):
+        User.objects.create_user(
+            "early", email="someone@example.org", password="a-long-enough-passphrase"
+        )
+        self.client.logout()
+        with override_settings(OIDC_AVAILABLE=False, ALLOW_SELF_SIGNUP=True):
+            response = self.client.post(
+                reverse("jobs:signup"),
+                {
+                    "username": "late",
+                    "email": "Someone@Example.org",
+                    "password1": "a-long-enough-passphrase",
+                    "password2": "a-long-enough-passphrase",
+                },
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            response.context["form"].errors.get("email")
+        )
+        self.assertFalse(User.objects.filter(username="late").exists())
+        self.assertEqual(User.objects.get(username="early").email, "someone@example.org")
 
     def test_the_federated_link_returns_once_a_client_exists(self):
         self.client.logout()
@@ -967,6 +1042,38 @@ class SirtfiTests(Base):
         with mock.patch.object(backend, "get_userinfo", return_value=self.CLAIMS):
             user = backend.get_or_create_user("tok", "idtok", self.CLAIMS)
         self.assertEqual(user, self.user)
+
+    def test_a_federated_login_takes_the_password_off_the_account_it_matches(self):
+        """An account made before the AAI client existed must not keep a way in.
+
+        Accounts are matched by email address, and while sign-up is open anyone
+        can claim an address. Once the real holder signs in through AAI, the
+        local password must stop working - otherwise whoever registered it
+        first keeps a way into an account that is not theirs.
+        """
+        self.assertTrue(self.user.has_usable_password())
+        backend = self._backend()
+        with mock.patch.object(backend, "get_userinfo", return_value=self.CLAIMS):
+            user = backend.get_or_create_user("tok", "idtok", self.CLAIMS)
+        self.assertEqual(user, self.user)
+        self.assertFalse(User.objects.get(pk=self.user.pk).has_usable_password())
+        self.client.logout()
+        self.assertFalse(
+            self.client.login(username="alice", password="pw"),
+            "the local password still opened a federated account",
+        )
+
+    def test_the_staff_account_keeps_its_password(self):
+        """The administrator's login is local on purpose; email is not its key."""
+        staff = User.objects.create_user(
+            "operator", "operator@fz-juelich.de", "pw", is_staff=True
+        )
+        backend = self._backend()
+        claims = dict(self.CLAIMS, sub="operator-sub", email="operator@fz-juelich.de")
+        with mock.patch.object(backend, "get_userinfo", return_value=claims):
+            user = backend.get_or_create_user("tok", "idtok", claims)
+        self.assertEqual(user, staff)
+        self.assertTrue(User.objects.get(pk=staff.pk).has_usable_password())
 
     def test_tr1_successful_login_is_logged_with_actor_and_time(self):
         """[TR1] retain who did what, when."""
