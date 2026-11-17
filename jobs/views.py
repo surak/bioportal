@@ -308,6 +308,35 @@ def queue_status(request):
     return render(request, "jobs/queue.html", {"snapshots": snapshots})
 
 
+def _rejection_message(api_key: str, exc: Exception) -> str:
+    """Say what the service refused, so a valid key is not blamed in vain.
+
+    The router answers 401 for a key it does not recognise and 403 for one it
+    recognises but will not admit - two different situations that used to
+    arrive as the same sentence. The fingerprint lets someone compare what we
+    received against what their token page shows without either of us seeing
+    the key itself.
+    """
+    from jobs import credentials
+
+    status = getattr(exc, "status", None)
+    if status == 403:
+        return (
+            "Blablador recognised this key but will not admit it to the five "
+            "molecular models (HTTP 403). That is a permission on your "
+            "account, not a mistyped key - the service operators can tell you "
+            "whether your account may use them."
+        )
+    return (
+        f"Blablador did not recognise this key (HTTP {status or 401}). The "
+        f"portal received {len(api_key)} characters, fingerprint "
+        f"{credentials.fingerprint(api_key)} - compare that with the key on "
+        "your Blablador token page. The usual cause is a copy that lost or "
+        "picked up characters: check it was not shortened by a line break and "
+        "copy it again from the token page."
+    )
+
+
 @login_required
 def credential(request):
     """Where a user stores, replaces or removes their own Blablador key."""
@@ -330,8 +359,8 @@ def credential(request):
             # rather than on their first submission.
             try:
                 blablador.queue(api_key, registry.all_specs()[0].alias)
-            except blablador.InvalidCredential:
-                form.add_error("api_key", "Blablador rejected this key.")
+            except blablador.InvalidCredential as exc:
+                form.add_error("api_key", _rejection_message(api_key, exc))
             except blablador.BlabladorError as exc:
                 form.add_error(
                     None,

@@ -127,10 +127,46 @@ class ApiKeyForm(forms.Form):
         ),
     )
 
+    # What surrounds a key in the places people copy it from.
+    QUOTES = "\"'`\u201c\u201d\u2018\u2019"
+    PREFIXES = ("bearer ", "authorization: bearer ")
+    # NAME=value, as an env line or an export holds it. Deliberately narrow: a
+    # key may itself contain '-', '.' and '=', so only a plain identifier to
+    # the left of the first '=' counts as a variable name.
+    ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=\s*(.+)$", re.S)
+
     def clean_api_key(self):
+        """Store the key itself, not the decorations around it.
+
+        A key is nearly always pasted from somewhere that quotes it: a JSON
+        body, an export line, a terminal echo, a chat message that helpfully
+        wraps it in backticks. Sent as-is those characters reach the router and
+        come back 401, which the service reports as a bad key - and the reader
+        then hunts for a mistake they did not make.
+        """
         key = (self.cleaned_data["api_key"] or "").strip()
+        key = key.strip(self.QUOTES).strip()
+        # A whole Authorization header is a common slip; keep the credential.
+        lowered = key.lower()
+        for prefix in self.PREFIXES:
+            if lowered.startswith(prefix):
+                key = key[len(prefix):].strip()
+                break
+        match = self.ASSIGNMENT_RE.match(key)
+        if match:
+            key = match.group(1).strip()
+        # Quotes and separators from a JSON value or an env line.
+        while True:
+            before = key
+            key = key.strip().rstrip(",;").strip().strip(self.QUOTES).strip()
+            if key == before:
+                break
+
         if len(key) < 16 or any(c.isspace() for c in key):
-            raise forms.ValidationError("That does not look like an API key.")
+            raise forms.ValidationError(
+                "That does not look like an API key: it should be one unbroken "
+                "string with no spaces in it."
+            )
         return key
 
 

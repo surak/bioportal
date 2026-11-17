@@ -794,7 +794,35 @@ class CredentialTests(Base):
                 reverse("jobs:credential"), {"api_key": "a-bad-key-0123456789"}
             )
         self.assertFalse(ApiCredential.objects.filter(user=self.user).exists())
-        self.assertContains(resp, "rejected this key")
+        self.assertContains(resp, "did not recognise this key")
+
+    def test_a_rejected_key_is_not_blamed_on_the_key_when_it_is_a_permission(self):
+        """401 and 403 are different problems and must read differently."""
+        ApiCredential.objects.filter(user=self.user).delete()
+        with mock.patch(
+            "jobs.blablador._post",
+            side_effect=blablador.InvalidCredential("nope", status=403),
+        ):
+            resp = self.client.post(
+                reverse("jobs:credential"), {"api_key": "a-bad-key-0123456789"}
+            )
+        self.assertFalse(ApiCredential.objects.filter(user=self.user).exists())
+        self.assertContains(resp, "will not admit it")
+        self.assertNotContains(resp, "did not recognise this key")
+
+    def test_the_rejection_says_how_much_arrived_not_what_it_was(self):
+        """A fingerprint is comparable; the key itself is never echoed."""
+        ApiCredential.objects.filter(user=self.user).delete()
+        with mock.patch(
+            "jobs.blablador._post",
+            side_effect=blablador.InvalidCredential("nope", status=401),
+        ):
+            resp = self.client.post(
+                reverse("jobs:credential"), {"api_key": "a-bad-key-0123456789"}
+            )
+        body = resp.content.decode()
+        self.assertIn("20 characters", body)
+        self.assertNotIn("a-bad-key-0123456789", body)
 
     def test_stored_key_is_never_rendered_back(self):
         resp = self.client.get(reverse("jobs:credential"))
@@ -807,6 +835,69 @@ class CredentialTests(Base):
         self.assertFalse(ApiCredential.objects.filter(user=self.user).exists())
         job.refresh_from_db()
         self.assertEqual(job.status, Status.RUNNING)
+
+
+class ApiKeyPasteTests(TestCase):
+    """A key arrives wrapped in whatever it was copied from.
+
+    The router answers 401 for the decorations as readily as for a wrong key,
+    and the old message then sent the reader hunting for a mistake in a key
+    that was correct all along. These are the shapes people actually paste.
+    """
+
+    KEY = "glpat-AbCdEfGhIjKlMnOpQrSt.01.zyxwvutsrqponmlk"
+
+    def clean(self, raw):
+        from jobs.forms import ApiKeyForm
+
+        form = ApiKeyForm({"api_key": raw})
+        self.assertTrue(form.is_valid(), form.errors)
+        return form.cleaned_data["api_key"]
+
+    def test_a_bare_key_is_kept_as_it_is(self):
+        self.assertEqual(self.clean(self.KEY), self.KEY)
+
+    def test_surrounding_whitespace_is_dropped(self):
+        self.assertEqual(self.clean(f"  {self.KEY}\n"), self.KEY)
+
+    def test_straight_quotes_are_dropped(self):
+        self.assertEqual(self.clean(f'"{self.KEY}"'), self.KEY)
+        self.assertEqual(self.clean(f"'{self.KEY}'"), self.KEY)
+
+    def test_smart_quotes_are_dropped(self):
+        """A key copied out of a word processor or a chat carries these."""
+        self.assertEqual(self.clean(f"\u201c{self.KEY}\u201d"), self.KEY)
+        self.assertEqual(self.clean(f"\u2018{self.KEY}\u2019"), self.KEY)
+
+    def test_a_json_value_loses_its_quotes_and_comma(self):
+        self.assertEqual(self.clean(f'"{self.KEY}",'), self.KEY)
+
+    def test_backticks_are_dropped(self):
+        self.assertEqual(self.clean(f"`{self.KEY}`"), self.KEY)
+
+    def test_an_authorization_header_keeps_only_the_credential(self):
+        """The whole header value is a common paste, and used to be rejected
+        outright with a message that named no cause."""
+        self.assertEqual(self.clean(f"Bearer {self.KEY}"), self.KEY)
+        self.assertEqual(self.clean(f"bearer {self.KEY}"), self.KEY)
+        self.assertEqual(self.clean(f"Authorization: Bearer {self.KEY}"), self.KEY)
+
+    def test_an_env_assignment_keeps_only_the_credential(self):
+        self.assertEqual(self.clean(f"BLABLADOR_API_KEY={self.KEY}"), self.KEY)
+        self.assertEqual(self.clean(f"key={self.KEY}"), self.KEY)
+
+    def test_a_key_with_a_space_inside_is_still_refused(self):
+        from jobs.forms import ApiKeyForm
+
+        form = ApiKeyForm({"api_key": "glpat-abcd efgh ijkl mnop qrst"})
+        self.assertFalse(form.is_valid())
+        self.assertIn("unbroken", " ".join(form.errors["api_key"]))
+
+    def test_a_key_too_short_to_be_one_is_refused(self):
+        from jobs.forms import ApiKeyForm
+
+        form = ApiKeyForm({"api_key": "short"})
+        self.assertFalse(form.is_valid())
 
 
 class StructureCheckTests(Base):
