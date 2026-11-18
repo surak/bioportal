@@ -107,14 +107,14 @@ spec:
       initContainers:
         # Migrations run once per rollout, before any web process serves.
         - name: migrate
-          image: registry.jsc.fz-juelich.de/kaas/rke2-clusters/blablador/bioportal:0.1.10
+          image: registry.jsc.fz-juelich.de/kaas/rke2-clusters/blablador/bioportal:0.1.11
           command: [python, manage.py, migrate, --noinput]
           envFrom:
             - configMapRef: {name: bioportal-config}
             - secretRef: {name: bioportal-secrets}
       containers:
         - name: web
-          image: registry.jsc.fz-juelich.de/kaas/rke2-clusters/blablador/bioportal:0.1.10
+          image: registry.jsc.fz-juelich.de/kaas/rke2-clusters/blablador/bioportal:0.1.11
           envFrom:
             - configMapRef: {name: bioportal-config}
             - secretRef: {name: bioportal-secrets}
@@ -176,7 +176,7 @@ spec:
         fsGroup: 10001
       containers:
         - name: reconcile
-          image: registry.jsc.fz-juelich.de/kaas/rke2-clusters/blablador/bioportal:0.1.10
+          image: registry.jsc.fz-juelich.de/kaas/rke2-clusters/blablador/bioportal:0.1.11
           command: [python, manage.py, reconcile, --loop]
           envFrom:
             - configMapRef: {name: bioportal-config}
