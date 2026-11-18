@@ -23,6 +23,13 @@
     {% endif %}
   </p>
 
+  {% if busy %}
+    <p class="hint">
+      The queue is busy: {{ busy.people }} other {{ busy.people|pluralize:"person has,people have" }}
+      {{ busy.jobs }} {{ spec.name }} job{{ busy.jobs|pluralize }} in flight, so yours may wait a while to start.
+    </p>
+  {% endif %}
+
   {% if job.waiting_reason %}
     <p class="hint">
       {% if job.waiting_reason == "waiting_for_gpu_capacity" %}Waiting for GPU capacity.

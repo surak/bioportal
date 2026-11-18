@@ -16,7 +16,15 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from jobs import blablador, forms as jobforms, registry
-from jobs.models import ApiCredential, ArtifactState, Job, JobEvent, Status, key_for
+from jobs.models import (
+    Actor,
+    ApiCredential,
+    ArtifactState,
+    Job,
+    JobEvent,
+    Status,
+    key_for,
+)
 
 log = logging.getLogger(__name__)
 
@@ -60,6 +68,7 @@ def submit(request, slug):
     at_quota = active >= settings.MAX_ACTIVE_JOBS_PER_USER
     credential = getattr(request.user, "credential", None)
     needs_key = credential is None or credential.is_rejected
+    busy = _busy(spec, request.user)
 
     if request.method == "POST":
         form = spec.form_class(request.POST, request.FILES)
@@ -94,8 +103,32 @@ def submit(request, slug):
             "active": active,
             "needs_key": needs_key,
             "credential": credential,
+            "busy": busy,
         },
     )
+
+
+def _busy(spec, user) -> dict | None:
+    """How many other people already have jobs in flight for this model.
+
+    Counted from this portal's own rows, so it costs no call to the service and
+    names nobody: only the number of people and jobs ahead. None when the user
+    would be alone, so the page says nothing in the common case.
+    """
+    others = Job.objects.filter(
+        model_slug=spec.slug, status__in=Status.active()
+    ).exclude(owner=user)
+    jobs = others.count()
+    if not jobs:
+        return None
+    return {"people": others.values("owner").distinct().count(), "jobs": jobs}
+
+
+def _busy_for(job: Job) -> dict | None:
+    """Only a job still waiting its turn is told about the others."""
+    if job.status not in (Status.PENDING, Status.QUEUED):
+        return None
+    return _busy(job.spec, job.owner)
 
 
 def _create_and_submit(request, spec, form) -> Job:
@@ -118,7 +151,7 @@ def _create_and_submit(request, spec, form) -> Job:
             notify_by_email=form.cleaned_data.get("notify_by_email", True),
             status=Status.PENDING,
         )
-        JobEvent.objects.create(job=job, kind="created")
+        JobEvent.objects.create(job=job, kind="created", actor=Actor.USER)
 
     try:
         remote = blablador.submit(
@@ -169,7 +202,10 @@ def _create_and_submit(request, spec, form) -> Job:
             job.status = Status.SUBMIT_FAILED
             job.error = str(exc)
             job.save(update_fields=["status", "error"])
-            JobEvent.objects.create(job=job, kind="submit-failed", detail=str(exc)[:500])
+            JobEvent.objects.create(
+                job=job, kind="submit-failed", detail=str(exc)[:500],
+                actor=Actor.USER,
+            )
             messages.error(request, f"The service rejected this job: {exc}")
         log.warning("submit failed for job %s: %s", job.pk, exc)
         return job
@@ -177,7 +213,9 @@ def _create_and_submit(request, spec, form) -> Job:
     changed = job.apply_remote(remote)
     job.submitted_at = timezone.now()
     job.save(update_fields=sorted(set(changed + ["submitted_at"])))
-    JobEvent.objects.create(job=job, kind="submitted", detail=job.remote_job_id)
+    JobEvent.objects.create(
+        job=job, kind="submitted", detail=job.remote_job_id, actor=Actor.USER
+    )
     messages.success(
         request,
         "Submitted. You can close this page — "
@@ -211,14 +249,22 @@ def _owned(request, pk) -> Job:
 @login_required
 def detail(request, pk):
     job = _owned(request, pk)
-    return render(request, "jobs/detail.html", {"job": job, "spec": job.spec})
+    return render(
+        request,
+        "jobs/detail.html",
+        {"job": job, "spec": job.spec, "busy": _busy_for(job)},
+    )
 
 
 @login_required
 def status_fragment(request, pk):
     """HTMX polls this while the job is active."""
     job = _owned(request, pk)
-    resp = render(request, "jobs/_status.html", {"job": job, "spec": job.spec})
+    resp = render(
+        request,
+        "jobs/_status.html",
+        {"job": job, "spec": job.spec, "busy": _busy_for(job)},
+    )
     if job.is_terminal:
         resp["HX-Trigger"] = "job-finished"
     return resp
@@ -246,7 +292,7 @@ def cancel(request, pk):
     else:
         job.apply_remote(remote)
         job.save()
-        JobEvent.objects.create(job=job, kind="cancel-requested")
+        JobEvent.objects.create(job=job, kind="cancel-requested", actor=Actor.USER)
         messages.success(
             request,
             "Cancellation requested. A running job keeps going until its "

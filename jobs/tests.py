@@ -25,7 +25,7 @@ from django.urls import reverse
 
 from jobs import blablador, notify
 from jobs.management.commands.reconcile import Command
-from jobs.models import ApiCredential, ArtifactState, Job, JobEvent, Status
+from jobs.models import Actor, ApiCredential, ArtifactState, Job, JobEvent, Status
 from jobs.registry import all_specs, get as get_spec
 
 SEQ = "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG"
@@ -102,7 +102,7 @@ class TransportTests(Base):
             captured["auth"] = req.headers["Authorization"]
             return FakeResp(json.dumps({"molecular_job": remote_job()}).encode())
 
-        with mock.patch("urllib.request.urlopen", fake_urlopen):
+        with mock.patch.object(blablador._opener, "open", fake_urlopen):
             blablador.submit("k", "alias-esmfold2", "uuid-1", {"sequence": SEQ})
 
         self.assertIs(captured["body"]["stream"], False)
@@ -119,7 +119,7 @@ class TransportTests(Base):
             "output": [{"content": [{"text": json.dumps(remote_job(status="running"))}]}]
         }
         with mock.patch("jobs.blablador._post", wraps=blablador._post):
-            with mock.patch("urllib.request.urlopen") as op:
+            with mock.patch.object(blablador._opener, "open") as op:
                 op.return_value.__enter__.return_value.read.return_value = json.dumps(
                     envelope
                 ).encode()
@@ -127,7 +127,7 @@ class TransportTests(Base):
         self.assertEqual(job["status"], "running")
 
     def test_html_gateway_error_is_transient_not_a_job_failure(self):
-        with mock.patch("urllib.request.urlopen") as op:
+        with mock.patch.object(blablador._opener, "open") as op:
             op.return_value.__enter__.return_value.read.return_value = b"<html>502</html>"
             with self.assertRaises(blablador.BlabladorError) as ctx:
                 blablador.status("k", "alias-esmfold2", JOB_ID)
@@ -141,8 +141,9 @@ class TransportTests(Base):
             (429, blablador.QueueFull),
             (503, blablador.ModelNotReady),
         ):
-            with mock.patch(
-                "urllib.request.urlopen",
+            with mock.patch.object(
+                blablador._opener,
+                "open",
                 side_effect=urllib.error.HTTPError(
                     "u", code, "e", {}, io.BytesIO(b"{}")
                 ),
@@ -1287,3 +1288,281 @@ class HandoverTests(Base):
         body = templ[templ.index("<h1>"): templ.rindex("{% endblock %}")]
         page = (root / "docs" / "handover.html").read_text()
         self.assertIn(body.strip(), page)
+
+
+# --- untrusted artifacts ---------------------------------------------------
+
+
+class ArchiveBombTests(Base):
+    """An artifact is untrusted input, parsed by the web process on demand.
+
+    A ZIP can unpack to far more than it weighs, and a gzip member inside it
+    can stack that again, so a small archive from the queue could otherwise
+    exhaust a web worker's memory the moment a user opened the preview.
+    """
+
+    def _archive(self, name: str, payload: bytes) -> Path:
+        import tempfile
+        import zipfile
+
+        path = Path(tempfile.mkdtemp()) / "result.zip"
+        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(name, payload)
+        return path
+
+    def test_zip_that_unpacks_hugely_is_refused(self):
+        from jobs import structure
+
+        archive = self._archive("big.pdb", b"A" * (200 * 1024 * 1024))
+        # The archive is small on disk; that is the whole point of the bombe.
+        self.assertLess(archive.stat().st_size, 1024 * 1024)
+        self.assertIsNone(structure.extract_preview(archive))
+        report = structure.check_archive(archive)
+        self.assertEqual(report["verdict"], structure.Verdict.UNKNOWN)
+        self.assertIn("preview limit", report["reason"])
+
+    def test_gzip_member_that_expands_hugely_is_refused(self):
+        import gzip
+
+        from jobs import structure
+
+        archive = self._archive(
+            "s.pdb.gz", gzip.compress(b"B" * (200 * 1024 * 1024))
+        )
+        self.assertIsNone(structure.extract_preview(archive))
+        report = structure.check_archive(archive)
+        self.assertEqual(report["verdict"], structure.Verdict.UNKNOWN)
+        self.assertIn("expands past", report["reason"])
+
+    def test_a_real_structure_still_parses(self):
+        from jobs import structure
+
+        pdb = (
+            "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00 50.00           C\n"
+            "ATOM      2  CA  ALA A   2       3.800   0.000   0.000  1.00 50.00           C\n"
+            "END\n"
+        )
+        archive = self._archive("ok.pdb", pdb.encode())
+        name, text = structure.extract_preview(archive)
+        self.assertEqual(name, "ok.pdb")
+        self.assertIn("ATOM", text)
+
+
+# --- the API key may only ever reach the configured host -------------------
+
+
+class CredentialEgressTests(Base):
+    """Every request carries a user's key, so redirects are an exfiltration path.
+
+    urllib re-sends request headers when it follows a redirect - including when
+    it rewrites a POST into a GET - so a 302 from the service, or from a proxy
+    in front of it, would hand one user's credential to whatever host the
+    Location named. Neither a redirect nor a downgrade to plain HTTP may happen.
+    """
+
+    def test_a_redirect_is_refused_rather_than_followed(self):
+        import urllib.error
+
+        redirect = urllib.error.HTTPError(
+            "https://api.example/v1/responses", 302, "Found",
+            {"Location": "https://collector.example/steal"}, io.BytesIO(b""),
+        )
+        with mock.patch.object(blablador._opener, "open", side_effect=redirect):
+            with self.assertRaises(blablador.BlabladorError) as ctx:
+                blablador.status("k", "alias-esmfold2", JOB_ID)
+        # 302 is a server-side problem, not evidence the key is bad.
+        self.assertNotIsInstance(ctx.exception, blablador.InvalidCredential)
+
+    def test_a_plain_http_base_is_refused(self):
+        with override_settings(BLABLADOR_API_BASE="http://api.example/v1"):
+            with self.assertRaises(blablador.BlabladorError) as ctx:
+                blablador.status("k", "alias-esmfold2", JOB_ID)
+        self.assertIn("https", str(ctx.exception))
+
+    def test_the_redirect_handler_does_not_forward_the_request(self):
+        """The guard itself, independent of any patching."""
+        import urllib.request
+
+        req = urllib.request.Request(
+            "https://api.example/v1/responses",
+            data=b"{}",
+            headers={"Authorization": "Bearer secret"},
+        )
+        with self.assertRaises(blablador.BlabladorError):
+            blablador._NoRedirect().redirect_request(
+                req, None, 302, "Found", {}, "https://collector.example/steal"
+            )
+
+
+# --- attribution -----------------------------------------------------------
+
+
+class AttributionTests(Base):
+    """The trail must say whether a person or the service acted.
+
+    An unattended reconciler and a signed-in owner both change a job's state.
+    "The job was cancelled" is a different incident depending on which of them
+    did it, and a trail that cannot tell them apart is no use in a review.
+    """
+
+    def test_creating_a_job_is_recorded_as_the_user(self):
+        job = self.make_job()
+        JobEvent.objects.create(job=job, kind="created", actor=Actor.USER)
+        self.assertEqual(job.events.get().actor, Actor.USER)
+
+    def test_the_reconciler_marks_its_own_events(self):
+        job = self.make_job(status=Status.RUNNING, started_at=None)
+        with mock.patch(
+            "jobs.blablador._post", return_value=remote_job(status="completed")
+        ):
+            Command().poll_active()
+        actors = set(job.events.values_list("actor", flat=True))
+        self.assertIn(Actor.RECONCILER, actors)
+        self.assertNotIn(Actor.USER, actors)
+
+    def test_a_status_change_leaves_one_event_naming_the_actor(self):
+        job = self.make_job(status=Status.RUNNING)
+        with mock.patch(
+            "jobs.blablador._post", return_value=remote_job(status="completed")
+        ):
+            Command().poll_active()
+        event = job.events.get(kind="status")
+        self.assertEqual(event.actor, Actor.RECONCILER)
+        self.assertIn("running -> completed", event.detail)
+
+    def test_rejected_credential_is_recorded_as_the_reconciler(self):
+        job = self.make_job(status=Status.RUNNING)
+        with mock.patch(
+            "jobs.blablador._post",
+            side_effect=blablador.InvalidCredential("401", status=401),
+        ):
+            Command().poll_active()
+        event = job.events.get(kind="credential-rejected")
+        self.assertEqual(event.actor, Actor.RECONCILER)
+
+
+# --- the credential lifecycle is auditable --------------------------------
+
+
+class CredentialAuditTests(Base):
+    def test_storing_a_key_is_audited_without_the_key(self):
+        # Start with no key, so this is a first store rather than a replace.
+        ApiCredential.objects.filter(user=self.user).delete()
+        with self.assertLogs("jobs.audit", level="INFO") as logs:
+            ApiCredential.store(self.user, "glpat-abcdefghijklmnopqrst")
+        line = "\n".join(logs.output)
+        self.assertIn("credential-stored", line)
+        self.assertIn("user=alice", line)
+        # A fingerprint, so a later incident can tell which key was in place.
+        self.assertIn("fingerprint=", line)
+        self.assertNotIn("glpat-abcde", line)
+
+    def test_replacing_a_key_is_distinguishable_from_the_first(self):
+        ApiCredential.store(self.user, "glpat-firstkey0000000000")
+        with self.assertLogs("jobs.audit", level="INFO") as logs:
+            ApiCredential.store(self.user, "glpat-secondkey000000000")
+        self.assertIn("credential-replaced", "\n".join(logs.output))
+
+    def test_removing_a_key_is_audited(self):
+        cred = ApiCredential.store(self.user, "glpat-abcdefghijklmnopqrst")
+        with self.assertLogs("jobs.audit", level="INFO") as logs:
+            cred.delete()
+        self.assertIn("credential-removed", "\n".join(logs.output))
+
+    def test_a_successful_poll_stamps_last_used(self):
+        """Otherwise a key that died months ago looks freshly used."""
+        job = self.make_job(status=Status.RUNNING)
+        cred = ApiCredential.store(self.user, "glpat-abcdefghijklmnopqrst")
+        self.assertIsNone(cred.last_used_at)
+        with mock.patch(
+            "jobs.blablador._post", return_value=remote_job(status="running")
+        ):
+            Command().poll_active()
+        cred.refresh_from_db()
+        self.assertIsNotNone(cred.last_used_at)
+
+
+# --- only one sweep downloads an archive ----------------------------------
+
+
+class ArtifactClaimTests(Base):
+    """A second sweep must not refetch an archive the first is already fetching.
+
+    The download is metered against the owner's own quota, so a duplicate fetch
+    is a duplicate charge, and it is what a pod restart or an overlapping sweep
+    produces naturally.
+    """
+
+    def test_a_job_already_downloading_is_not_claimed_again(self):
+        from jobs.models import ArtifactState
+
+        self.make_job(status=Status.COMPLETED, artifact_state=ArtifactState.DOWNLOADING)
+        with mock.patch("jobs.blablador.fetch_artifact") as fetch:
+            Command().download_artifacts()
+        fetch.assert_not_called()
+
+    def test_a_pending_job_is_claimed_exactly_once(self):
+        from jobs.models import ArtifactState
+
+        job = self.make_job(status=Status.COMPLETED, artifact_state=ArtifactState.PENDING)
+        calls = []
+
+        def fake_fetch(key, model, remote, dest):
+            calls.append(job.pk)
+            # A competing sweep sees DOWNLOADING, not PENDING, so it skips.
+            self.assertEqual(
+                Job.objects.get(pk=job.pk).artifact_state,
+                ArtifactState.DOWNLOADING,
+            )
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(b"PK\x05\x06" + b"\0" * 18)
+            return 22
+
+        with mock.patch("jobs.blablador.fetch_artifact", side_effect=fake_fetch):
+            Command().download_artifacts()
+        self.assertEqual(calls, [job.pk])
+
+
+class BusyQueueTests(Base):
+    """Someone about to wait behind other people should be told so."""
+
+    def _others(self, n_people, jobs_each=1, **over):
+        for i in range(n_people):
+            other = User.objects.create_user(f"other{i}", f"o{i}@x.de", "pw")
+            for _ in range(jobs_each):
+                self.make_job(owner=other, remote_job_id="", **over)
+
+    def test_submit_page_quiet_when_alone(self):
+        self.make_job()  # the user's own job does not count
+        resp = self.client.get(reverse("jobs:submit", args=["esmfold2"]))
+        self.assertNotContains(resp, "queue is busy")
+
+    def test_submit_page_counts_people_and_jobs(self):
+        self._others(2, jobs_each=2)
+        resp = self.client.get(reverse("jobs:submit", args=["esmfold2"]))
+        self.assertContains(resp, "queue is busy")
+        self.assertContains(resp, "2 other people have")
+        self.assertContains(resp, "4 ")
+
+    def test_finished_jobs_do_not_count(self):
+        self._others(1, status=Status.COMPLETED)
+        resp = self.client.get(reverse("jobs:submit", args=["esmfold2"]))
+        self.assertNotContains(resp, "queue is busy")
+
+    def test_names_nobody(self):
+        self._others(1)
+        resp = self.client.get(reverse("jobs:submit", args=["esmfold2"]))
+        self.assertContains(resp, "1 other person has")
+        self.assertNotContains(resp, "other0")
+
+    def test_queued_job_is_told(self):
+        job = self.make_job()
+        self._others(1)
+        resp = self.client.get(reverse("jobs:status", args=[job.pk]))
+        self.assertContains(resp, "queue is busy")
+
+    def test_running_job_is_not_told(self):
+        job = self.make_job(status=Status.RUNNING)
+        self._others(1)
+        resp = self.client.get(reverse("jobs:status", args=[job.pk]))
+        self.assertNotContains(resp, "queue is busy")

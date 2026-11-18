@@ -32,6 +32,16 @@
   </p>
 {% endif %}
 
+{% if busy %}
+  <p class="notice">
+    <strong>The queue is busy.</strong>
+    {{ busy.people }} other {{ busy.people|pluralize:"person has,people have" }}
+    {{ busy.jobs }} {{ spec.name }} job{{ busy.jobs|pluralize }} waiting or running,
+    so yours may take longer than usual to start. You can still submit — it
+    keeps its place in the queue.
+  </p>
+{% endif %}
+
 <form method="post" enctype="multipart/form-data" class="jobform">
   {% csrf_token %}
   {{ form.as_p }}
