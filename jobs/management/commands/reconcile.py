@@ -27,7 +27,15 @@ from django.db import transaction
 from django.utils import timezone
 
 from jobs import blablador, notify, structure
-from jobs.models import ApiCredential, ArtifactState, Job, JobEvent, Status, key_for
+from jobs.models import (
+    Actor,
+    ApiCredential,
+    ArtifactState,
+    Job,
+    JobEvent,
+    Status,
+    key_for,
+)
 
 log = logging.getLogger(__name__)
 
@@ -135,6 +143,13 @@ class Command(BaseCommand):
             previous = job.status
             changed = job.apply_remote(remote)
 
+            # A reply proves the stored key works, so record when it last did.
+            # Without this the column is never written and a key that died
+            # months ago looks exactly like one used a minute ago.
+            cred = getattr(job.owner, "credential", None)
+            if cred is not None:
+                cred.mark_used()
+
             if previous == Status.PENDING and job.remote_job_id:
                 job.submitted_at = job.submitted_at or timezone.now()
                 changed.append("submitted_at")
@@ -153,7 +168,10 @@ class Command(BaseCommand):
 
             if previous != job.status:
                 JobEvent.objects.create(
-                    job=job, kind=event, detail=f"{previous} -> {job.status}"
+                    job=job,
+                    kind=event,
+                    detail=f"{previous} -> {job.status}",
+                    actor=Actor.RECONCILER,
                 )
 
     def _next_poll(self, job: Job, remote: dict) -> dt.datetime | None:
@@ -179,7 +197,10 @@ class Command(BaseCommand):
             # A 400 here means the request itself is bad; retrying won't help.
             updates["status"] = Status.SUBMIT_FAILED
             updates["error"] = str(exc)[:4000]
-            JobEvent.objects.create(job=job, kind="submit-failed", detail=str(exc)[:500])
+            JobEvent.objects.create(
+                job=job, kind="submit-failed", detail=str(exc)[:500],
+                actor=Actor.RECONCILER,
+            )
         Job.objects.filter(pk=job.pk).update(**updates)
         log.warning("%s error on job %s (attempt %d): %s", context, job.pk, attempts, exc)
 
@@ -194,7 +215,10 @@ class Command(BaseCommand):
         ).update(rejected_at=timezone.now())
         if updated:
             JobEvent.objects.create(
-                job=job, kind="credential-rejected", detail=str(exc)[:300]
+                job=job,
+                kind="credential-rejected",
+                detail=str(exc)[:300],
+                actor=Actor.RECONCILER,
             )
             log.warning("API key for user %s was rejected by the service", job.owner_id)
         Job.objects.filter(pk=job.pk).update(
@@ -210,7 +234,9 @@ class Command(BaseCommand):
             poll_after=None,
             finished_at=job.finished_at or timezone.now(),
         )
-        JobEvent.objects.create(job=job, kind="gone", detail=detail[:500])
+        JobEvent.objects.create(
+            job=job, kind="gone", detail=detail[:500], actor=Actor.RECONCILER
+        )
 
     # --- 3. artifacts -----------------------------------------------------
 
@@ -221,8 +247,20 @@ class Command(BaseCommand):
         ).exclude(remote_job_id="").select_related("owner__credential")[:5]
 
         for job in pending:
+            # Claim the download with a conditional update rather than assuming
+            # it: a sweep overlapping a previous one (a slow download, or a pod
+            # restart that leaves an old one finishing) would otherwise fetch
+            # the same archive twice and pay for it twice in the owner's GPU
+            # quota. Only the sweep that moves the row out of PENDING works on
+            # it; everyone else skips.
+            claimed = Job.objects.filter(
+                pk=job.pk, artifact_state=ArtifactState.PENDING
+            ).update(artifact_state=ArtifactState.DOWNLOADING)
+            if not claimed:
+                log.info("artifact for job %s already being fetched; skipping", job.pk)
+                continue
+
             dest = Path(settings.ARTIFACT_ROOT) / str(job.pk) / blablador.ARTIFACT_FILENAME
-            Job.objects.filter(pk=job.pk).update(artifact_state=ArtifactState.DOWNLOADING)
             try:
                 size = blablador.fetch_artifact(
                     key_for(job.owner), job.spec.alias, job.remote_job_id, dest
@@ -232,7 +270,9 @@ class Command(BaseCommand):
                 self._reject_credential(job, exc)
             except blablador.JobGone:
                 Job.objects.filter(pk=job.pk).update(artifact_state=ArtifactState.EXPIRED)
-                JobEvent.objects.create(job=job, kind="artifact-expired")
+                JobEvent.objects.create(
+                    job=job, kind="artifact-expired", actor=Actor.RECONCILER
+                )
                 log.warning("artifact for job %s expired before download", job.pk)
             except blablador.BlabladorError as exc:
                 state = (
@@ -255,7 +295,10 @@ class Command(BaseCommand):
                     structure_check=report,
                 )
                 JobEvent.objects.create(
-                    job=job, kind="artifact-stored", detail=f"{size} bytes"
+                    job=job,
+                    kind="artifact-stored",
+                    detail=f"{size} bytes",
+                    actor=Actor.RECONCILER,
                 )
                 if report.get("verdict") == structure.Verdict.IMPLAUSIBLE:
                     JobEvent.objects.create(
@@ -265,6 +308,7 @@ class Command(BaseCommand):
                             f"{report.get('plausible_bonds')}/{report.get('bonds')} "
                             f"bonds plausible, mean {report.get('mean_ca_ca')} A"
                         ),
+                        actor=Actor.RECONCILER,
                     )
                     log.warning(
                         "job %s returned an implausible structure (%s)",
@@ -289,6 +333,7 @@ class Command(BaseCommand):
                 job=job,
                 kind="stale",
                 detail=f"still running after {settings.STALE_RUNNING_SECONDS}s",
+                actor=Actor.RECONCILER,
             )
             log.error(
                 "job %s (remote %s) has been running for over %ds - escalate to operations",

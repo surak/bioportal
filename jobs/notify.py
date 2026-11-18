@@ -14,7 +14,7 @@ from django.core.mail import send_mail
 from django.db import transaction
 from django.utils import timezone
 
-from jobs.models import Job, JobEvent, Status
+from jobs.models import Actor, Job, JobEvent, Status
 
 log = logging.getLogger(__name__)
 
@@ -52,7 +52,9 @@ def send_pending() -> int:
                     recipient_list=[address],
                     fail_silently=False,
                 )
-            JobEvent.objects.create(job=job, kind="notified", detail=address)
+            JobEvent.objects.create(
+                job=job, kind="notified", detail=address, actor=Actor.SYSTEM
+            )
             sent += 1
         except Exception:
             log.exception("failed to notify job %s", job.pk)

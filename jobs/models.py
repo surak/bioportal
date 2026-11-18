@@ -247,17 +247,53 @@ class ApiCredential(models.Model):
 
     @classmethod
     def store(cls, user, api_key: str) -> "ApiCredential":
-        from jobs import credentials
+        """Replace this user's key, and say so in the security log.
 
-        obj, _ = cls.objects.update_or_create(
+        Storing a key is the one action that decides whose account every future
+        job is metered to, so it leaves a record naming the person and the
+        fingerprint - never the key. The fingerprint is enough to tell whether
+        a later incident involves the key that was in place at the time.
+        """
+        from jobs import audit, credentials
+
+        finger = credentials.fingerprint(api_key)
+        obj, created = cls.objects.update_or_create(
             user=user,
             defaults={
                 "encrypted_key": credentials.encrypt(api_key),
-                "fingerprint": credentials.fingerprint(api_key),
+                "fingerprint": finger,
                 "rejected_at": None,
             },
         )
+        audit.audit.info(
+            "credential-%s user=%s id=%s fingerprint=%s",
+            "stored" if created else "replaced",
+            user.get_username(),
+            user.pk,
+            finger,
+        )
         return obj
+
+    def delete(self, *args, **kwargs):
+        """Removing a key is as security-relevant as storing one."""
+        from jobs import audit
+
+        audit.audit.info(
+            "credential-removed user=%s id=%s fingerprint=%s",
+            self.user.get_username(),
+            self.user_id,
+            self.fingerprint,
+        )
+        return super().delete(*args, **kwargs)
+
+    def mark_used(self) -> None:
+        """Record that the key worked, so a stale key is visible as stale.
+
+        Updated with a direct queryset write: this runs on every reconcile
+        sweep, and going through save() would rewrite the encrypted blob (and
+        its updated_at) for nothing.
+        """
+        type(self).objects.filter(pk=self.pk).update(last_used_at=timezone.now())
 
 
 def key_for(user) -> str | None:
@@ -274,6 +310,21 @@ def key_for(user) -> str | None:
         return None
 
 
+class Actor:
+    """Who caused a JobEvent.
+
+    An unattended service and a signed-in person both change a job's state, and
+    a trail that does not say which is useless precisely when it is needed: "the
+    job was cancelled" is a different incident depending on whether the owner
+    did it or the reconciler did it on its own. Recording the actor costs one
+    column and answers that without reading logs.
+    """
+
+    USER = "user"
+    RECONCILER = "reconciler"
+    SYSTEM = "system"
+
+
 class JobEvent(models.Model):
     """Append-only audit trail."""
 
@@ -281,9 +332,13 @@ class JobEvent(models.Model):
     at = models.DateTimeField(auto_now_add=True)
     kind = models.CharField(max_length=32)
     detail = models.TextField(blank=True)
+    # "user", "reconciler" or "system". Never empty: an event that cannot say
+    # who caused it is a gap in the trail, so the default is the honest one for
+    # the code that writes most events.
+    actor = models.CharField(max_length=16, default=Actor.SYSTEM)
 
     class Meta:
         ordering = ("at",)
 
     def __str__(self) -> str:
-        return f"{self.job_id} {self.kind}"
+        return f"{self.job_id} {self.kind} ({self.actor})"

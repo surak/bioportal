@@ -17,9 +17,13 @@ backbone is connected, not that the prediction is correct.
 from __future__ import annotations
 
 import gzip
+import io
+import logging
 import math
 import zipfile
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 # Trans peptide bonds give ~3.80 A; cis-proline ~2.9. Anything outside this
 # window means consecutive residues are not bonded to each other.
@@ -30,6 +34,19 @@ PLAUSIBLE_FRACTION = 0.9
 
 STRUCTURE_SUFFIXES = (".pdb", ".cif", ".pdb.gz", ".cif.gz")
 
+# An artifact is untrusted input: it is whatever the molecular service's worker
+# produced, and it is parsed by the *web* process when a user opens the preview.
+# A ZIP can unpack to far more than it weighs (a few KB can claim gigabytes),
+# and gzip inside it can stack that again, so an archive taken at face value is
+# a way to exhaust a web worker's memory from the queue. These caps are generous
+# for real structures - the largest PDB entry is tens of MB - and are what makes
+# the bombe harmless rather than fatal.
+MAX_PREVIEW_BYTES = 64 * 1024 * 1024
+
+
+class TooLarge(ValueError):
+    """The archive unpacks to more than the portal is willing to parse."""
+
 
 class Verdict:
     OK = "ok"
@@ -38,9 +55,30 @@ class Verdict:
 
 
 def _read_member(zf: zipfile.ZipFile, name: str) -> str:
-    raw = zf.read(name)
+    """One member's text, refusing to unpack more than MAX_PREVIEW_BYTES.
+
+    The size is checked against the ZIP's own declaration *and* enforced while
+    reading, because the declaration is attacker-controlled too: a header can
+    claim 1 MB and still stream more. gzip is decompressed the same way, since
+    a small .gz member can expand without bound.
+    """
+    info = zf.getinfo(name)
+    if info.file_size > MAX_PREVIEW_BYTES:
+        raise TooLarge(
+            f"{name} declares {info.file_size} bytes, over the "
+            f"{MAX_PREVIEW_BYTES} byte preview limit"
+        )
+
+    with zf.open(name) as fh:
+        raw = fh.read(MAX_PREVIEW_BYTES + 1)
+    if len(raw) > MAX_PREVIEW_BYTES:
+        raise TooLarge(f"{name} is larger than its header claimed")
+
     if name.endswith(".gz"):
-        raw = gzip.decompress(raw)
+        with gzip.GzipFile(fileobj=io.BytesIO(raw)) as gz:
+            raw = gz.read(MAX_PREVIEW_BYTES + 1)
+        if len(raw) > MAX_PREVIEW_BYTES:
+            raise TooLarge(f"{name} expands past the preview limit")
     return raw.decode("utf-8", errors="replace")
 
 
@@ -182,7 +220,8 @@ def extract_preview(archive: Path) -> tuple[str, str] | None:
         with zipfile.ZipFile(archive) as zf:
             name = names[0]
             text = _read_member(zf, name)
-    except (zipfile.BadZipFile, OSError, gzip.BadGzipFile):
+    except (zipfile.BadZipFile, OSError, gzip.BadGzipFile, TooLarge) as exc:
+        log.warning("cannot preview %s: %s", archive.name, exc)
         return None
     if ".cif" in name.lower() or "_atom_site." in text:
         text = cif_to_pdb(text)
@@ -227,7 +266,7 @@ def check_archive(archive: Path) -> dict:
     try:
         with zipfile.ZipFile(archive) as zf:
             report = check_text(_read_member(zf, names[0]))
-    except (zipfile.BadZipFile, OSError, gzip.BadGzipFile) as exc:
+    except (zipfile.BadZipFile, OSError, gzip.BadGzipFile, TooLarge) as exc:
         return {"verdict": Verdict.UNKNOWN, "reason": str(exc)[:200]}
     report["file"] = names[0]
     report["structure_files"] = len(names)

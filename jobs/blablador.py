@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import http.client
 import json
 import logging
 import random
@@ -28,6 +29,60 @@ log = logging.getLogger(__name__)
 ACTION_TIMEOUT = 60
 MAX_CHUNK = 1_048_576
 ARTIFACT_FILENAME = "result.zip"
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse redirects instead of following them.
+
+    Every request here carries the user's API key in a header. urllib re-sends
+    that header on a redirect - including when it rewrites a POST into a GET -
+    so a 302 from the service, or from any proxy in front of it, would hand one
+    user's credential to whatever host the Location named. A gateway that is
+    misconfigured or compromised is exactly when that happens, and no call in
+    this module needs a redirect, so the safe answer is to stop rather than
+    follow.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise BlabladorError(
+            f"the service answered {code} redirecting elsewhere; refusing to "
+            "follow it with the caller's API key attached",
+            status=code,
+        )
+
+
+class _HTTPSOnly(urllib.request.HTTPSHandler):
+    """Only ever speak TLS to the configured service.
+
+    urllib will happily use plain HTTP if a later change of BLABLADOR_API_BASE
+    says so. The key travels in a header either way, so the scheme is enforced
+    here rather than trusted from configuration.
+    """
+
+    def https_open(self, req):
+        return self.do_open(http.client.HTTPSConnection, req)
+
+    def http_open(self, req):
+        raise BlabladorError(
+            "the service was addressed over plain HTTP; the API key is only "
+            "ever sent over TLS"
+        )
+
+
+_opener = urllib.request.build_opener(_NoRedirect, _HTTPSOnly)
+
+
+def _endpoint() -> str:
+    """The one URL this module will ever POST to.
+
+    Built from configuration only, never from anything in a request, and
+    checked here so a misconfigured base fails loudly instead of quietly
+    sending credentials to the wrong scheme.
+    """
+    base = settings.BLABLADOR_API_BASE.rstrip("/")
+    if not base.startswith("https://"):
+        raise BlabladorError(f"BLABLADOR_API_BASE must be an https:// URL, not {base!r}")
+    return f"{base}/responses"
 
 
 class BlabladorError(RuntimeError):
@@ -68,7 +123,7 @@ def _post(api_key: str, model: str, action: dict[str, Any]) -> dict[str, Any]:
         {"model": model, "stream": False, "input": json.dumps(action)}
     ).encode()
     req = urllib.request.Request(
-        f"{settings.BLABLADOR_API_BASE.rstrip('/')}/responses",
+        _endpoint(),
         data=body,
         headers={
             "Authorization": f"Bearer {api_key}",
@@ -79,7 +134,9 @@ def _post(api_key: str, model: str, action: dict[str, Any]) -> dict[str, Any]:
     )
 
     try:
-        with urllib.request.urlopen(req, timeout=ACTION_TIMEOUT) as resp:
+        # This opener refuses redirects and plain HTTP, so the key can only
+        # reach the host configured above. See _NoRedirect.
+        with _opener.open(req, timeout=ACTION_TIMEOUT) as resp:
             raw = resp.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as exc:
         raw = exc.read().decode("utf-8", errors="replace")[:500]

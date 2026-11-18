@@ -6,8 +6,11 @@ from jobs.models import ApiCredential, ArtifactState, Job, JobEvent, Status
 class JobEventInline(admin.TabularInline):
     model = JobEvent
     extra = 0
-    readonly_fields = ("at", "kind", "detail")
+    readonly_fields = ("at", "actor", "kind", "detail")
     can_delete = False
+    # The reconciler writes most events, so filtering by actor is how an
+    # operator tells an agent's own initiative from the owner's action.
+    fields = ("at", "actor", "kind", "detail")
 
 
 @admin.register(Job)
@@ -53,8 +56,8 @@ class JobAdmin(admin.ModelAdmin):
 
 @admin.register(JobEvent)
 class JobEventAdmin(admin.ModelAdmin):
-    list_display = ("job", "at", "kind", "detail")
-    list_filter = ("kind",)
+    list_display = ("job", "at", "actor", "kind", "detail")
+    list_filter = ("actor", "kind")
     search_fields = ("job__id", "detail")
 
 
