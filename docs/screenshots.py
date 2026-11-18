@@ -2,7 +2,7 @@
 """Capture screenshots of the running portal for the README and docs site.
 
     python manage.py runserver 8731          # in another shell, with DEBUG=1
-    python docs/screenshots.py
+    BIOPORTAL_PASSWORD=... python docs/screenshots.py
 
 Shots are written to docs/img/. They are taken against a real database, so run
 this against an instance with a few finished jobs in it rather than an empty
@@ -11,14 +11,15 @@ one.
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8731"
-USERNAME = "admin"
-PASSWORD = "devpass"
+USERNAME = os.environ.get("BIOPORTAL_USERNAME", "admin")
+PASSWORD = os.environ["BIOPORTAL_PASSWORD"]
 
 OUT = Path(__file__).resolve().parent / "img"
 OUT.mkdir(parents=True, exist_ok=True)
