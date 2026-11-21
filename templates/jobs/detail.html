@@ -9,7 +9,10 @@
   {% if job.submitted_at %} · submitted {{ job.submitted_at|date:"Y-m-d H:i" }} UTC{% endif %}
 </p>
 
-<div id="status">{% include "jobs/_status.html" %}</div>
+{# Polling replaces the card every 15s; keep the diagnostics open if the user opened them. #}
+<div id="status"
+     hx-on::before-swap="this.dataset.diag = this.querySelector('details.diagnostics')?.open ? '1' : ''"
+     hx-on::after-swap="const d = this.querySelector('details.diagnostics'); if (d && this.dataset.diag) d.open = true">{% include "jobs/_status.html" %}</div>
 
 <details class="params">
   <summary>Parameters</summary>

@@ -714,6 +714,15 @@ class PageTests(Base):
         self.assertNotContains(resp, "hx-trigger")
         self.assertEqual(resp["HX-Trigger"], "job-finished")
 
+    def test_diagnostics_show_remote_id_and_open_on_failure(self):
+        job = self.make_job(status=Status.RUNNING, remote_job_id="abc123")
+        body = self.client.get(reverse("jobs:status", args=[job.pk])).content.decode()
+        self.assertIn("<code>abc123</code>", body)
+        self.assertIn('<details class="diagnostics">', body)
+        Job.objects.filter(pk=job.pk).update(status=Status.FAILED)
+        body = self.client.get(reverse("jobs:status", args=[job.pk])).content.decode()
+        self.assertIn('<details class="diagnostics" open>', body)
+
     def test_no_invented_progress_or_eta(self):
         """No percentage, progress bar or ETA: the service publishes none."""
         job = self.make_job(status=Status.RUNNING)

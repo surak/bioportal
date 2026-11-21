@@ -80,6 +80,22 @@
     <pre class="log error">{{ job.error }}</pre>
   {% endif %}
 
+  {% if job.remote_job_id %}
+    <details class="diagnostics"{% if job.status == "failed" %} open{% endif %}>
+      <summary>Job diagnostics</summary>
+      <p>Blablador job ID <code>{{ job.remote_job_id }}</code></p>
+      <ul>
+        <li>Submitted to BioPortal {{ job.created_at|date:"Y-m-d H:i:s T" }}</li>
+        {% if job.started_at %}
+          <li>Worker started {{ job.started_at|date:"Y-m-d H:i:s T" }}</li>
+        {% endif %}
+        {% if job.finished_at %}
+          <li>{{ job.get_status_display }} {{ job.finished_at|date:"Y-m-d H:i:s T" }}</li>
+        {% endif %}
+      </ul>
+    </details>
+  {% endif %}
+
   {% if job.gpu_seconds is not None %}
     <p class="usage">
       {{ job.gpu_seconds|floatformat:1 }} GPU-seconds
