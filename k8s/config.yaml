@@ -24,10 +24,12 @@ data:
   STALE_RUNNING_SECONDS: "108000"
 
   # BindCraft runs one design on one GPU and cannot split across cards, so the
-  # target plus the binder has to fit in one. Upstream: ~550 residues on a
-  # 32 Gb card, ~950 on 80 Gb. Assumes the smaller card until we know which GPU
-  # Blablador schedules these on.
-  BINDCRAFT_RESIDUE_BUDGET: "550"
+  # target plus the binder has to fit in one. Upstream gives ~550 residues on a
+  # 32 Gb card and ~950 on 80 Gb; this cluster's BindCraft worker is an A100
+  # 40 Gb, which interpolates to ~617. Rounded down for margin: the upstream
+  # figures are approximate and the card is not entirely ours. Raise it if real
+  # runs show headroom, lower it if they die out of memory.
+  BINDCRAFT_RESIDUE_BUDGET: "600"
 
   # Shown on /privacy/ and /terms/. The pages flag themselves as incomplete
   # until the controller, DPO and admin contact are all set.
