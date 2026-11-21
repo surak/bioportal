@@ -201,6 +201,21 @@ DEFAULT_FROM_EMAIL = _env("DEFAULT_FROM_EMAIL", "bioportal@fz-juelich.de")
 # --- Quotas ---------------------------------------------------------------
 MAX_ACTIVE_JOBS_PER_USER = int(_env("MAX_ACTIVE_JOBS_PER_USER", "5"))
 
+# --- BindCraft sizing ------------------------------------------------------
+# BindCraft cannot be split across GPUs: "Due to the underlying AlphaFold2
+# code, BindCraft cannot be parallelised across multiple GPUs." One trajectory
+# runs on one card, so a complex too big for that card cannot be rescued by
+# adding hardware - it can only be refused or trimmed. The upstream wiki gives
+# "a 32 Gb card can fit about 550 residues (target + binder), an 80 Gb card
+# about 950", memory scaling "semi-linearly with the number of residues in the
+# input PDB plus the size of the binder".
+#
+# The default assumes the smaller card because we do not control which GPU
+# Blablador schedules these on, and a refusal at submit time costs a user
+# seconds while an out-of-memory death costs them a queue wait. Raise it once
+# real runs show where the cliff is on the hardware actually in use.
+BINDCRAFT_RESIDUE_BUDGET = int(_env("BINDCRAFT_RESIDUE_BUDGET", "550"))
+
 # --- Privacy statement ----------------------------------------------------
 # Shown at /privacy/, which is the URL Helmholtz AAI asks for when
 # registering the service. These must be set by whoever operates the

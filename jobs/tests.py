@@ -33,6 +33,15 @@ PDB = "ATOM      1  N   MET A   1      27.340  24.430   2.614  1.00  9.67       
 JOB_ID = "a" * 32
 
 
+def _pdb(residues: int, chain: str = "A") -> str:
+    """A PDB with one backbone atom per residue, for size checks."""
+    return "".join(
+        f"ATOM  {i:5d}  CA  ALA {chain}{i:4d}      "
+        f"27.340  24.430   2.614  1.00  9.67           C\n"
+        for i in range(1, residues + 1)
+    ) + "END\n"
+
+
 def remote_job(**over):
     job = {
         "id": JOB_ID,
@@ -353,10 +362,67 @@ class ParameterTests(Base):
         )
         self.assertFalse(form.is_valid())
 
-    def _upload(self):
+    def test_oversized_complex_is_refused_with_a_way_forward(self):
+        """One design runs on one GPU, so too big is a refusal, not a wait."""
+        spec = get_spec("bindcraft")
+        form = spec.form_class(
+            {"chains": "A", "binder_length_min": 60, "binder_length_max": 100,
+             "samples": 1, "max_trajectories": 100, "walltime_hours": 1},
+            {"target_pdb": self._upload(residues=600)},
+        )
+        self.assertFalse(form.is_valid())
+        error = " ".join(form.errors["target_pdb"])
+        self.assertIn("700 residues", error)   # 600 target + 100 binder
+        self.assertIn("550", error)            # the budget
+        self.assertIn("Trim", error)
+        self.assertIn("hotspots", error)
+
+    def test_only_named_chains_count_towards_the_budget(self):
+        """Chains the run ignores must not push a workable target over."""
+        spec = get_spec("bindcraft")
+        pdb = _pdb(300, chain="A") + _pdb(300, chain="B")
+        form = spec.form_class(
+            {"chains": "A", "binder_length_min": 60, "binder_length_max": 100,
+             "samples": 1, "max_trajectories": 100, "walltime_hours": 1},
+            {"target_pdb": self._upload(text=pdb)},
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_a_chain_that_is_not_in_the_file_is_named(self):
+        spec = get_spec("bindcraft")
+        form = spec.form_class(
+            {"chains": "Z", "binder_length_min": 60, "binder_length_max": 100,
+             "samples": 1, "max_trajectories": 100, "walltime_hours": 1},
+            {"target_pdb": self._upload(residues=50)},
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("Z", " ".join(form.errors["chains"]))
+
+    @override_settings(BINDCRAFT_RESIDUE_BUDGET=950)
+    def test_budget_follows_the_configured_card(self):
+        """An 80 Gb card takes what a 32 Gb one cannot."""
+        spec = get_spec("bindcraft")
+        form = spec.form_class(
+            {"chains": "A", "binder_length_min": 60, "binder_length_max": 100,
+             "samples": 1, "max_trajectories": 100, "walltime_hours": 1},
+            {"target_pdb": self._upload(residues=600)},
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_binder_length_stops_at_the_documented_ceiling(self):
+        spec = get_spec("bindcraft")
+        form = spec.form_class(
+            {"chains": "A", "binder_length_min": 60, "binder_length_max": 400,
+             "samples": 1, "max_trajectories": 100, "walltime_hours": 1},
+            {"target_pdb": self._upload(residues=50)},
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("binder_length_max", form.errors)
+
+    def _upload(self, residues=1, text=None):
         from django.core.files.uploadedfile import SimpleUploadedFile
 
-        return SimpleUploadedFile("target.pdb", PDB.encode())
+        return SimpleUploadedFile("target.pdb", (text or _pdb(residues)).encode())
 
 
 # --- reconciliation -------------------------------------------------------

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from django import forms
+from django.conf import settings
 
-from jobs.forms import BaseJobForm, PDBTextField
+from jobs.forms import BaseJobForm, PDBTextField, count_residues
 from jobs.registry import ModelSpec, register
 
 
@@ -16,8 +17,13 @@ class BindCraftForm(BaseJobForm):
         label="Target chains",
         help_text="One or more chain IDs, e.g. A or A,B.",
     )
-    binder_length_min = forms.IntegerField(min_value=10, max_value=500, initial=60)
-    binder_length_max = forms.IntegerField(min_value=10, max_value=500, initial=100)
+    # Upstream: "The maximum size of reliably generated binders is currently
+    # 250 amino acids", with 60-180 called the optimal range.
+    binder_length_min = forms.IntegerField(min_value=10, max_value=250, initial=60)
+    binder_length_max = forms.IntegerField(
+        min_value=10, max_value=250, initial=100,
+        help_text="60-180 is the range upstream calls optimal; 250 is its ceiling.",
+    )
     hotspots = forms.CharField(
         required=False,
         label="Hotspots",
@@ -40,7 +46,43 @@ class BindCraftForm(BaseJobForm):
         lo, hi = cleaned.get("binder_length_min"), cleaned.get("binder_length_max")
         if lo and hi and lo > hi:
             self.add_error("binder_length_max", "Maximum must be at least the minimum.")
+        self._check_fits_on_one_gpu(cleaned, hi)
         return cleaned
+
+    def _check_fits_on_one_gpu(self, cleaned: dict, binder_max: int | None) -> None:
+        """Refuse complexes too big for a single card, while it is still cheap.
+
+        A trajectory cannot be split across GPUs, so this is not a queueing
+        problem that waiting solves: the only ways through are a smaller
+        target or a smaller binder. Saying so now beats an out-of-memory
+        death after an hour in the queue.
+        """
+        pdb, chains = cleaned.get("target_pdb"), cleaned.get("chains")
+        if not pdb or not chains or not binder_max:
+            return
+        wanted = [c.strip() for c in chains.split(",") if c.strip()]
+        target = count_residues(pdb, wanted)
+        if not target:
+            self.add_error("chains", (
+                f"No ATOM records for chain{'s' if len(wanted) > 1 else ''} "
+                f"{', '.join(wanted)} in that file. Check the chain IDs."
+            ))
+            return
+        budget = settings.BINDCRAFT_RESIDUE_BUDGET
+        total = target + binder_max
+        if total > budget:
+            self.add_error("target_pdb", (
+                f"Chain{'s' if len(wanted) > 1 else ''} {', '.join(wanted)} "
+                f"hold {target} residues, and with a binder of up to "
+                f"{binder_max} that is {total} residues in the folded complex. "
+                f"This portal's limit is {budget}, the most that fits in one "
+                f"GPU's memory — and BindCraft cannot spread one design across "
+                f"several GPUs. Trim the target to the part that matters for "
+                f"binding (upstream recommends this for speed regardless), "
+                f"name only the chains you need, and use hotspots to point the "
+                f"search at the interface. A shorter maximum binder length "
+                f"also buys room."
+            ))
 
 
 def build(cleaned: dict) -> dict:
@@ -70,5 +112,8 @@ SPEC = register(ModelSpec(
         "Native quality filters can accept fewer designs than you asked for - "
         "a finished run is not a quality guarantee.",
         "Output is not deterministic; this build does not wire a seed into the CLI.",
+        "One design runs on one GPU and cannot be split across several, so the "
+        "target plus the binder must fit in a single card's memory. Trim the "
+        "target to the part that matters for binding before uploading it.",
     ),
 ))

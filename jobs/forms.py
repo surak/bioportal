@@ -89,6 +89,26 @@ def _looks_like_pdb(text: str) -> bool:
     )
 
 
+def count_residues(pdb_text: str, chains: list[str] | None = None) -> int:
+    """Count distinct residues in ATOM records, optionally limited to chains.
+
+    A residue is identified the way the PDB format does: chain, sequence
+    number and insertion code together. Alternate locations and multi-atom
+    records therefore count once. HETATM is ignored - waters, ions and ligands
+    are not what drives the folding complex's size.
+    """
+    wanted = {c.upper() for c in chains} if chains else None
+    seen = set()
+    for line in pdb_text.splitlines():
+        if not line.startswith("ATOM  "):
+            continue
+        chain = line[21:22].strip().upper()
+        if wanted is not None and chain not in wanted:
+            continue
+        seen.add((chain, line[22:26].strip(), line[26:27]))
+    return len(seen)
+
+
 def check_parameter_size(parameters: dict) -> None:
     """Guard the shim's 12 MB serialized-parameter cap before submitting."""
     import json
