@@ -233,8 +233,15 @@ Deployed to the `bioportal` namespace of the `blablador-import` cluster:
 ```bash
 docker buildx build --platform linux/amd64 \
   -t registry.jsc.fz-juelich.de/kaas/rke2-clusters/blablador/bioportal:<tag> --push .
-kubectl -n bioportal apply -f k8s/
+kubectl --context blablador-import -n bioportal apply -f k8s/
 ```
+
+Always name the context: a stray default context (Docker Desktop, say) takes
+the whole stack, namespace and all, and the pods then hang without their
+Secret. Through Rancher, `kubectl rollout status` can time out while the
+rollout itself finishes; check with `get deploy -o wide` before assuming it
+failed. An expired Rancher token shows up as `system:unauthenticated`;
+download a fresh kubeconfig from the cluster's page in Rancher.
 
 The cluster is amd64; building on an Apple Silicon machine without
 `--platform linux/amd64` produces an image that fails with
@@ -251,7 +258,7 @@ The cluster is amd64; building on an Apple Silicon machine without
 `k8s/config.yaml` is committed; the Secret is not. Create it once:
 
 ```bash
-kubectl -n bioportal create secret generic bioportal-secrets \
+kubectl --context blablador-import -n bioportal create secret generic bioportal-secrets \
   --from-literal=DJANGO_SECRET_KEY="$(python -c 'import secrets;print(secrets.token_urlsafe(50))')" \
   --from-literal=DB_PASSWORD="$(python -c 'import secrets;print(secrets.token_urlsafe(24))')" \
   --from-literal=CREDENTIAL_ENCRYPTION_KEY="$(python -c 'from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())')"
